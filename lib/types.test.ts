@@ -45,6 +45,27 @@ describe('annotation boundary parsing', () => {
     expect(parseAnnotation(legacy)).toEqual(legacy);
   });
 
+  test('parses bounded page and nearby element context', () => {
+    const enriched: Annotation = {
+      ...validAnnotation,
+      pageTitle: 'Hacker News',
+      anchor: {
+        ...validAnnotation.anchor,
+        text: 'We scaled PgBouncer to 4x throughput',
+        nearbyText: '8. We scaled PgBouncer to 4x throughput (clickhouse.com)',
+      },
+    };
+
+    expect(parseAnnotation(enriched)).toEqual(enriched);
+    expect(parseAnnotation({ ...enriched, pageTitle: 'x'.repeat(161) })).toBeNull();
+    expect(
+      parseAnnotation({
+        ...enriched,
+        anchor: { ...enriched.anchor, nearbyText: 'x'.repeat(281) },
+      }),
+    ).toBeNull();
+  });
+
   test('strictly parses mutation commands', () => {
     const command: AnnotationMutationCommand = {
       type: 'app-notes:annotation/create',
@@ -55,6 +76,7 @@ describe('annotation boundary parsing', () => {
         anchor: validAnnotation.anchor,
         note: validAnnotation.note,
         color: validAnnotation.color,
+        pageTitle: 'Yahoo News',
       },
     };
 

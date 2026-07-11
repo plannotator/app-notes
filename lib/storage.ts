@@ -229,15 +229,10 @@ export async function exportAnnotations(url: string): Promise<string> {
   const annotations = await getAnnotations(url);
   if (annotations.length === 0) return '# No annotations\n';
 
-  let markdown = `# Annotations for ${url}\n\n`;
+  const pageTitle = getLatestPageTitle(annotations) ?? getPageLabel(url);
+  let markdown = `# Notes for ${pageTitle}\n\n${url}\n\n`;
   for (const annotation of annotations) {
-    const time = new Date(annotation.createdAt).toLocaleString();
-    const icon =
-      annotation.type === 'comment' ? '💬' : annotation.type === 'highlight' ? '🖍️' : '📌';
-    markdown += `## ${icon} ${annotation.anchor.label}\n`;
-    markdown += `\`${annotation.anchor.selector}\`\n\n`;
-    if (annotation.note) markdown += `${annotation.note}\n\n`;
-    markdown += `_${time}_\n\n---\n\n`;
+    markdown += formatAnnotationMarkdown(annotation, '##');
   }
   return markdown;
 }
@@ -262,14 +257,13 @@ export function formatSiteAnnotationsMarkdown(
   markdown += `${groups.length} ${groups.length === 1 ? 'page' : 'pages'}\n\n`;
 
   for (const group of groups) {
-    markdown += `## ${getPageLabel(group.pageId)}\n\n`;
+    const pageTitle = getLatestPageTitle(group.annotations);
+    const pageLabel = getPageLabel(group.pageId);
+    markdown += `## ${pageTitle ?? pageLabel}\n\n`;
+    if (pageTitle && pageLabel !== 'Home') markdown += `Path: \`${pageLabel}\`\n\n`;
     markdown += `${group.pageId}\n\n`;
     for (const annotation of group.annotations) {
-      const time = new Date(annotation.createdAt).toLocaleString();
-      markdown += `### ${annotation.anchor.label}\n\n`;
-      markdown += `\`${annotation.anchor.selector}\`\n\n`;
-      if (annotation.note) markdown += `${annotation.note}\n\n`;
-      markdown += `_Created ${time}_\n\n`;
+      markdown += formatAnnotationMarkdown(annotation, '###');
     }
   }
 
@@ -350,6 +344,7 @@ async function createAnnotation(
     anchor: payload.anchor,
     note: payload.note,
     color: payload.color,
+    pageTitle: payload.pageTitle,
   };
 
   await area.set({ [key]: [...existing, annotation] });
@@ -456,10 +451,44 @@ function getSiteLabel(url: string): string {
 function getPageLabel(pageId: string): string {
   try {
     const parsed = new URL(pageId);
-    return `${parsed.pathname}${parsed.search}`;
+    const path = `${parsed.pathname}${parsed.search}`;
+    return path === '/' ? 'Home' : path;
   } catch {
     return pageId;
   }
+}
+
+function getLatestPageTitle(annotations: ReadonlyArray<Annotation>): string | null {
+  let latest: Annotation | null = null;
+  for (const annotation of annotations) {
+    if (!annotation.pageTitle) continue;
+    if (latest === null || annotation.updatedAt > latest.updatedAt) latest = annotation;
+  }
+  return latest?.pageTitle ?? null;
+}
+
+function formatAnnotationMarkdown(annotation: Annotation, headingLevel: '##' | '###'): string {
+  const selectedText = annotation.anchor.text;
+  const heading = truncateHeading(selectedText ?? annotation.anchor.label, 96);
+  const time = new Date(annotation.createdAt).toLocaleString();
+  let markdown = `${headingLevel} ${heading}\n\n`;
+  markdown += `Element: \`${annotation.anchor.label}\`\n\n`;
+  markdown += `Selector: \`${annotation.anchor.selector}\`\n\n`;
+  if (selectedText && selectedText !== heading) {
+    markdown += `Selected text: ${selectedText}\n\n`;
+  }
+  if (annotation.anchor.nearbyText && annotation.anchor.nearbyText !== selectedText) {
+    markdown += `Context: ${annotation.anchor.nearbyText}\n\n`;
+  }
+  markdown += `**Note**\n\n${annotation.note}\n\n`;
+  markdown += `_Created ${time}_\n\n`;
+  return markdown;
+}
+
+function truncateHeading(text: string, maximumLength: number): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maximumLength) return normalized;
+  return `${normalized.slice(0, maximumLength - 1).trimEnd()}…`;
 }
 
 async function sendMutation(

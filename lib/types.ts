@@ -25,6 +25,7 @@ export interface AnnotationAnchor {
   readonly rect?: AnnotationRect;
   readonly attributes?: ReadonlyArray<AnnotationAnchorAttribute>;
   readonly text?: string;
+  readonly nearbyText?: string;
 }
 
 /** One persisted page annotation. */
@@ -37,6 +38,8 @@ export interface Annotation {
   readonly anchor: AnnotationAnchor;
   readonly note: string;
   readonly color: string;
+  /** The document title captured when the annotation was created. */
+  readonly pageTitle?: string;
 }
 
 /** The exact caller-owned fields required to create an annotation. */
@@ -47,6 +50,7 @@ export interface AnnotationCreatePayload {
   readonly anchor: AnnotationAnchor;
   readonly note: string;
   readonly color: string;
+  readonly pageTitle: string;
 }
 
 /** The only mutable annotation field currently exposed by the product. */
@@ -166,7 +170,11 @@ export type ClearSiteAnnotationsResult =
 
 /** Parse one unknown persisted value into an Annotation. */
 export function parseAnnotation(input: unknown): Annotation | null {
-  if (!isRecord(input) || !hasExactKeys(input, ANNOTATION_KEYS)) return null;
+  if (!isRecord(input) || !hasAllowedAndRequiredKeys(
+    input,
+    ANNOTATION_ALLOWED_KEYS,
+    ANNOTATION_REQUIRED_KEYS,
+  )) return null;
   if (!isNonEmptyString(input.id) || !isSupportedUrl(input.url)) return null;
   if (!isFiniteNonNegativeNumber(input.createdAt)) return null;
   if (!isFiniteNonNegativeNumber(input.updatedAt) || input.updatedAt < input.createdAt) return null;
@@ -175,6 +183,12 @@ export function parseAnnotation(input: unknown): Annotation | null {
 
   const anchor = parseAnnotationAnchor(input.anchor);
   if (anchor === null) return null;
+
+  let pageTitle: string | undefined;
+  if (Object.hasOwn(input, 'pageTitle')) {
+    if (!isBoundedNonBlankString(input.pageTitle, PAGE_TITLE_MAX_LENGTH)) return null;
+    pageTitle = input.pageTitle;
+  }
 
   return {
     id: input.id,
@@ -185,6 +199,7 @@ export function parseAnnotation(input: unknown): Annotation | null {
     anchor,
     note: input.note,
     color: input.color,
+    ...(pageTitle !== undefined ? { pageTitle } : {}),
   };
 }
 
@@ -207,6 +222,7 @@ export function parseAnnotationCreatePayload(input: unknown): AnnotationCreatePa
     return null;
   }
   if (!isNonBlankString(input.note) || !isNonEmptyString(input.color)) return null;
+  if (!isBoundedNonBlankString(input.pageTitle, PAGE_TITLE_MAX_LENGTH)) return null;
 
   const anchor = parseAnnotationAnchor(input.anchor);
   if (anchor === null) return null;
@@ -218,6 +234,7 @@ export function parseAnnotationCreatePayload(input: unknown): AnnotationCreatePa
     anchor,
     note: input.note,
     color: input.color,
+    pageTitle: input.pageTitle,
   };
 }
 
@@ -288,7 +305,10 @@ export function parseAnnotationMutationResult(input: unknown): AnnotationMutatio
   }
 }
 
-const ANNOTATION_KEYS = [
+const PAGE_TITLE_MAX_LENGTH = 160;
+const ELEMENT_TEXT_MAX_LENGTH = 180;
+const NEARBY_TEXT_MAX_LENGTH = 280;
+const ANNOTATION_REQUIRED_KEYS = [
   'id',
   'url',
   'createdAt',
@@ -298,11 +318,26 @@ const ANNOTATION_KEYS = [
   'note',
   'color',
 ] as const;
+const ANNOTATION_ALLOWED_KEYS = [...ANNOTATION_REQUIRED_KEYS, 'pageTitle'] as const;
 const ANCHOR_REQUIRED_KEYS = ['selector', 'tagName', 'label'] as const;
-const ANCHOR_ALLOWED_KEYS = [...ANCHOR_REQUIRED_KEYS, 'rect', 'attributes', 'text'] as const;
+const ANCHOR_ALLOWED_KEYS = [
+  ...ANCHOR_REQUIRED_KEYS,
+  'rect',
+  'attributes',
+  'text',
+  'nearbyText',
+] as const;
 const ANCHOR_ATTRIBUTE_KEYS = ['name', 'value'] as const;
 const RECT_KEYS = ['x', 'y', 'width', 'height'] as const;
-const CREATE_PAYLOAD_KEYS = ['id', 'url', 'type', 'anchor', 'note', 'color'] as const;
+const CREATE_PAYLOAD_KEYS = [
+  'id',
+  'url',
+  'type',
+  'anchor',
+  'note',
+  'color',
+  'pageTitle',
+] as const;
 const CREATE_COMMAND_KEYS = ['type', 'payload'] as const;
 const UPDATE_COMMAND_KEYS = ['type', 'url', 'id', 'note'] as const;
 const DELETE_COMMAND_KEYS = ['type', 'url', 'id'] as const;
@@ -337,21 +372,24 @@ function parseAnnotationAnchor(input: unknown): AnnotationAnchor | null {
 
   let text: string | undefined;
   if (Object.hasOwn(input, 'text')) {
-    if (typeof input.text !== 'string') return null;
+    if (!isBoundedNonBlankString(input.text, ELEMENT_TEXT_MAX_LENGTH)) return null;
     text = input.text;
   }
 
-  const base = { selector: input.selector, tagName: input.tagName, label: input.label };
-  if (rect !== undefined && attributes !== undefined && text !== undefined) {
-    return { ...base, rect, attributes, text };
+  let nearbyText: string | undefined;
+  if (Object.hasOwn(input, 'nearbyText')) {
+    if (!isBoundedNonBlankString(input.nearbyText, NEARBY_TEXT_MAX_LENGTH)) return null;
+    nearbyText = input.nearbyText;
   }
-  if (rect !== undefined && attributes !== undefined) return { ...base, rect, attributes };
-  if (rect !== undefined && text !== undefined) return { ...base, rect, text };
-  if (attributes !== undefined && text !== undefined) return { ...base, attributes, text };
-  if (rect !== undefined) return { ...base, rect };
-  if (attributes !== undefined) return { ...base, attributes };
-  if (text !== undefined) return { ...base, text };
-  return base;
+
+  const base = { selector: input.selector, tagName: input.tagName, label: input.label };
+  return {
+    ...base,
+    ...(rect !== undefined ? { rect } : {}),
+    ...(attributes !== undefined ? { attributes } : {}),
+    ...(text !== undefined ? { text } : {}),
+    ...(nearbyText !== undefined ? { nearbyText } : {}),
+  };
 }
 
 function parseAnnotationAnchorAttributes(
@@ -405,6 +443,10 @@ function isNonEmptyString(input: unknown): input is string {
 
 function isNonBlankString(input: unknown): input is string {
   return typeof input === 'string' && input.trim().length > 0;
+}
+
+function isBoundedNonBlankString(input: unknown, maximumLength: number): input is string {
+  return isNonBlankString(input) && input.length <= maximumLength;
 }
 
 function isFiniteNumber(input: unknown): input is number {

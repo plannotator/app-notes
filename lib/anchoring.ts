@@ -1,6 +1,11 @@
 import type { AnnotationAnchor, AnnotationAnchorAttribute } from './types';
 
 const SHADOW_BOUNDARY = ' >>> ';
+const ELEMENT_TEXT_MAX_LENGTH = 180;
+const NEARBY_TEXT_MAX_LENGTH = 280;
+const MAX_VISITED_NODES = 80;
+const MAX_CONTEXT_ANCESTORS = 4;
+const TEXT_NODE = 3;
 const SEMANTIC_ATTRIBUTES = [
   'data-testid',
   'data-test',
@@ -115,9 +120,109 @@ function getStableAttributes(element: Element): ReadonlyArray<AnnotationAnchorAt
   return attributes;
 }
 
+function truncateText(text: string, maximumLength: number): string {
+  if (text.length <= maximumLength) return text;
+
+  const prefix = text.slice(0, maximumLength - 1).trimEnd();
+  const lastSpace = prefix.lastIndexOf(' ');
+  const cutoff = lastSpace >= Math.floor(maximumLength * 0.7)
+    ? prefix.slice(0, lastSpace)
+    : prefix;
+  return `${cutoff}…`;
+}
+
+function getBoundedText(element: Element, maximumLength: number): string | undefined {
+  const pendingNodes: Node[] = [];
+  const chunks: string[] = [];
+  let visitedNodes = 0;
+  let collectedLength = 0;
+  pushChildNodes(element, pendingNodes);
+
+  while (pendingNodes.length > 0 && visitedNodes < MAX_VISITED_NODES) {
+    const node = pendingNodes.pop();
+    if (!node) break;
+    visitedNodes += 1;
+
+    if (node.nodeType === TEXT_NODE) {
+      const ignored = node.parentElement?.closest(
+        'script, style, noscript, template, [aria-hidden="true"]',
+      );
+      if (!ignored) {
+        const text = node.textContent?.replace(/\s+/g, ' ').trim();
+        if (text) {
+          chunks.push(text);
+          collectedLength += text.length + (chunks.length > 1 ? 1 : 0);
+        }
+      }
+    } else {
+      pushChildNodes(node, pendingNodes);
+    }
+
+    if (collectedLength > maximumLength) break;
+  }
+
+  const text = chunks.join(' ').replace(/\s+/g, ' ').trim();
+  return text ? truncateText(text, maximumLength) : undefined;
+}
+
+function pushChildNodes(node: Node, pendingNodes: Node[]): void {
+  const children: Node[] = [];
+  let child = node.firstChild;
+  while (child && children.length < MAX_VISITED_NODES) {
+    children.push(child);
+    child = child.nextSibling;
+  }
+  const overflow = pendingNodes.length + children.length - MAX_VISITED_NODES;
+  if (overflow > 0) pendingNodes.splice(0, overflow);
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    const next = children[index];
+    if (next) pendingNodes.push(next);
+  }
+}
+
 function getTextSnapshot(element: Element): string | undefined {
-  const text = element.textContent?.replace(/\s+/g, ' ').trim();
-  return text ? text.slice(0, 120) : undefined;
+  return getBoundedText(element, ELEMENT_TEXT_MAX_LENGTH);
+}
+
+function isContextContainer(element: Element): boolean {
+  const tag = element.tagName.toLowerCase();
+  if ([
+    'article',
+    'blockquote',
+    'fieldset',
+    'figcaption',
+    'figure',
+    'label',
+    'li',
+    'p',
+    'td',
+    'tr',
+  ].includes(tag)) return true;
+
+  const role = element.getAttribute('role');
+  return role === 'article' || role === 'listitem' || role === 'row';
+}
+
+function getNearbyText(element: Element, elementText: string | undefined): string | undefined {
+  const ownerDocument = element.ownerDocument;
+  const textMatch = elementText?.replace(/…$/, '').slice(0, 80);
+  let ancestor = element.parentElement;
+  let depth = 0;
+
+  while (ancestor && depth < MAX_CONTEXT_ANCESTORS) {
+    if (ancestor === ownerDocument.body || ancestor === ownerDocument.documentElement) {
+      return undefined;
+    }
+    if (isContextContainer(ancestor)) {
+      const candidate = getBoundedText(ancestor, NEARBY_TEXT_MAX_LENGTH);
+      const includesTarget = !textMatch || candidate?.includes(textMatch);
+      if (candidate && candidate !== elementText && includesTarget) return candidate;
+    }
+    ancestor = ancestor.parentElement;
+    depth += 1;
+  }
+
+  return undefined;
 }
 
 function isLikelyGeneratedClass(className: string): boolean {
@@ -203,6 +308,7 @@ export function identifyElement(element: Element): string {
 export function createAnnotationAnchor(element: Element, rect: DOMRect): AnnotationAnchor {
   const attributes = getStableAttributes(element);
   const text = getTextSnapshot(element);
+  const nearbyText = getNearbyText(element, text);
 
   return {
     selector: getUniqueSelector(element),
@@ -216,6 +322,7 @@ export function createAnnotationAnchor(element: Element, rect: DOMRect): Annotat
     },
     ...(attributes.length > 0 ? { attributes } : {}),
     ...(text ? { text } : {}),
+    ...(nearbyText ? { nearbyText } : {}),
   };
 }
 

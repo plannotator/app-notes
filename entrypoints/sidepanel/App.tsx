@@ -550,11 +550,13 @@ function AllNotesPage({ annotations, onOpenAnnotation }: AllNotesPageProps) {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-[10px] leading-4 text-text-tertiary">
-                    <span className="min-w-0 flex-1 truncate font-mono">{getPageLabel(annotation.url)}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {getAnnotationPageLabel(annotation)}
+                    </span>
                     <span className="shrink-0">{getRelativeTime(annotation.updatedAt)}</span>
                   </div>
                   <p className="mt-0.5 truncate text-xs leading-5 text-text-primary">
-                    {annotation.note}
+                    {getAnnotationSummary(annotation)}
                   </p>
                 </div>
                 <ChevronRight aria-hidden="true" className="shrink-0 text-text-tertiary" size={14} />
@@ -617,8 +619,11 @@ function AnnotationCard({
         </div>
       </div>
 
-      <p className="mt-1 truncate font-mono text-[11px] leading-4 text-text-secondary" title={annotation.anchor.label}>
-        {annotation.anchor.label}
+      <p
+        className="mt-1 truncate text-xs leading-5 text-text-secondary"
+        title={annotation.anchor.text ?? annotation.anchor.label}
+      >
+        {annotation.anchor.text ?? annotation.anchor.label}
       </p>
       <p className="truncate font-mono text-[10px] leading-4 text-text-tertiary" title={annotation.anchor.selector}>
         {annotation.anchor.selector}
@@ -764,16 +769,38 @@ function buildPanelGroups(
       pageId: group.pageId,
       annotations: group.annotations,
       id: String(index),
-      label: getPageLabel(group.pageId),
+      label: getPanelPageLabel(group.pageId, group.annotations),
     }));
 }
 
 function getPageLabel(pageId: string): string {
   try {
-    return new URL(pageId).pathname;
+    const path = new URL(pageId).pathname;
+    return path === '/' ? 'Home' : path;
   } catch {
     return pageId;
   }
+}
+
+function getAnnotationPageLabel(annotation: Annotation): string {
+  const path = getPageLabel(annotation.url);
+  if (!annotation.pageTitle) return path;
+  return path === 'Home' ? annotation.pageTitle : `${annotation.pageTitle} · ${path}`;
+}
+
+function getPanelPageLabel(
+  pageId: string,
+  annotations: ReadonlyArray<Annotation>,
+): string {
+  const pageTitle = annotations.find((annotation) => annotation.pageTitle)?.pageTitle;
+  return pageTitle ?? getPageLabel(pageId);
+}
+
+function getAnnotationSummary(annotation: Annotation): string {
+  const selectedText = annotation.anchor.text?.trim();
+  if (!selectedText) return annotation.note;
+  if (selectedText === annotation.note.trim()) return selectedText;
+  return `${selectedText} — ${annotation.note}`;
 }
 
 function getExportFilename(url: string): string {

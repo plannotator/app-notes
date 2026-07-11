@@ -25,12 +25,14 @@ interface SelectedElement {
   readonly element: Element;
   readonly label: string;
   readonly pageUrl: string;
+  readonly pageTitle: string;
   readonly rect: DOMRect;
   readonly returnFocus: HTMLElement | null;
   readonly storageKey: AnnotationStorageKey | null;
 }
 
 interface ExitWarningState {
+  readonly discardAction: 'click' | 'escape';
   readonly x: number;
   readonly y: number;
   readonly secondsLeft: number;
@@ -59,6 +61,17 @@ interface ContentAppProps {
 
 function createPageContext(href: string): PageContext {
   return { href, storageKey: getAnnotationStorageKeyForUrl(href) };
+}
+
+function getCurrentPageTitle(href: string): string {
+  const title = document.title.replace(/\s+/g, ' ').trim();
+  if (title) return title.slice(0, 160);
+
+  try {
+    return new URL(href).hostname.slice(0, 160);
+  } catch {
+    return 'Untitled page';
+  }
 }
 
 function isRuntimeMessage(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -151,6 +164,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
   const requestExitDraft = useCallback((
     x: number,
     y: number,
+    discardAction: ExitWarningState['discardAction'],
   ): boolean => {
     if (draftRef.current.trim().length === 0 || exitArmedRef.current) {
       closeEditor();
@@ -159,7 +173,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
 
     exitArmedRef.current = true;
     const expiresAt = Date.now() + 3000;
-    setExitWarning({ x, y, secondsLeft: 3 });
+    setExitWarning({ discardAction, x, y, secondsLeft: 3 });
 
     exitCountdownRef.current = window.setInterval(() => {
       const secondsLeft = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
@@ -169,11 +183,12 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
     return false;
   }, [clearExitWarning, closeEditor]);
 
-  const requestExitDraftNearSelection = useCallback((_source: DraftExitSource): boolean => {
+  const requestExitDraftNearSelection = useCallback((source: DraftExitSource): boolean => {
     const rect = selectedRef.current?.rect;
     return requestExitDraft(
       rect ? Math.min(rect.right + 8, window.innerWidth - 24) : window.innerWidth / 2,
       rect ? Math.max(rect.top, 24) : window.innerHeight / 2,
+      source === 'keyboard' ? 'escape' : 'click',
     );
   }, [requestExitDraft]);
 
@@ -240,6 +255,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
       element,
       label: identifyElement(element),
       pageUrl: pageRef.current.href,
+      pageTitle: getCurrentPageTitle(pageRef.current.href),
       rect,
       returnFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
       storageKey: pageRef.current.storageKey,
@@ -354,7 +370,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
       }
 
       if (selectedRef.current) {
-        requestExitDraft(event.clientX, event.clientY);
+        requestExitDraft(event.clientX, event.clientY, 'click');
         event.preventDefault();
         event.stopImmediatePropagation();
         return;
@@ -547,6 +563,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
       anchor: currentSelection.anchor,
       note,
       color: 'blue',
+      pageTitle: currentSelection.pageTitle,
     });
     if (result._tag !== 'created') return false;
 

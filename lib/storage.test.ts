@@ -266,6 +266,30 @@ describe('site Markdown export', () => {
     expect(markdown).toContain('## /news');
     expect(markdown).toContain('Tighten this card');
   });
+
+  test('uses page titles and selected content instead of opaque DOM labels', () => {
+    const url = 'https://news.ycombinator.com/';
+    const annotation: Annotation = {
+      ...annotationFixture('hn-story', 'Investigate this architecture', url),
+      pageTitle: 'Hacker News',
+      anchor: {
+        selector: '#\\34 8873940 > td:nth-of-type(3)',
+        tagName: 'td',
+        label: 'td.title',
+        text: 'We scaled PgBouncer to 4x throughput (clickhouse.com)',
+        nearbyText: '8. We scaled PgBouncer to 4x throughput (clickhouse.com)',
+      },
+    };
+
+    const markdown = formatSiteAnnotationsMarkdown(url, [annotation]);
+
+    expect(markdown).toContain('## Hacker News');
+    expect(markdown).toContain('### We scaled PgBouncer to 4x throughput (clickhouse.com)');
+    expect(markdown).toContain('Element: `td.title`');
+    expect(markdown).toContain('Context: 8. We scaled PgBouncer');
+    expect(markdown).toContain('**Note**\n\nInvestigate this architecture');
+    expect(markdown).not.toContain('## /');
+  });
 });
 
 class InMemoryStorageArea implements AnnotationStorageArea {
@@ -345,6 +369,7 @@ function createPayload(note: string): AnnotationCreatePayload {
     },
     note,
     color: 'blue',
+    pageTitle: 'Yahoo News',
   };
 }
 

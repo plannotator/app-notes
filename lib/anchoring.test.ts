@@ -77,6 +77,37 @@ describe('durable element anchoring', () => {
     expect(anchor.selector.split(' >>> ')).toHaveLength(1);
     expect(resolveAnnotationAnchor(anchor)).toBe(target);
   });
+
+  test('captures selected text and a small semantic row context', () => {
+    const document = installDocument(`
+      <table>
+        <tr class="athing">
+          <td class="rank">8.</td>
+          <td class="title">
+            <a>We scaled PgBouncer to 4x throughput</a>
+            <span> (clickhouse.com)</span>
+          </td>
+        </tr>
+      </table>
+    `);
+    const target = requireElement(document.querySelector('td.title'));
+    const anchor = createAnnotationAnchor(target, target.getBoundingClientRect());
+
+    expect(anchor.text).toBe('We scaled PgBouncer to 4x throughput (clickhouse.com)');
+    expect(anchor.nearbyText).toBe('8. We scaled PgBouncer to 4x throughput (clickhouse.com)');
+  });
+
+  test('caps semantic context without walking an entire container', () => {
+    const filler = Array.from({ length: 100 }, (_, index) => `<span>context-${index}</span>`).join(' ');
+    const document = installDocument(`<main><article><button>Target action</button>${filler}</article></main>`);
+    const target = requireElement(document.querySelector('button'));
+    const anchor = createAnnotationAnchor(target, target.getBoundingClientRect());
+
+    expect(anchor.text).toBe('Target action');
+    expect(anchor.nearbyText?.startsWith('Target action context-0')).toBe(true);
+    expect(anchor.nearbyText?.length).toBeLessThanOrEqual(280);
+    expect(anchor.nearbyText?.endsWith('…')).toBe(true);
+  });
 });
 
 function installDocument(html: string): Document {

@@ -1,12 +1,13 @@
 import { ShieldCheck } from 'lucide-react';
 interface ExitWarningToastProps {
+  discardAction: 'click' | 'escape';
   x: number;
   y: number;
   secondsLeft: number;
 }
 
 /** Confirms that an in-progress draft was protected from accidental dismissal. */
-export function ExitWarningToast({ x, y, secondsLeft }: ExitWarningToastProps) {
+export function ExitWarningToast({ discardAction, x, y, secondsLeft }: ExitWarningToastProps) {
   const margin = 12;
   const width = Math.min(264, window.innerWidth - margin * 2);
   const estimatedHeight = 62;
@@ -31,7 +32,11 @@ export function ExitWarningToast({ x, y, secondsLeft }: ExitWarningToastProps) {
       </span>
       <div>
         <p className="app-notes-exit-title">Draft kept</p>
-        <p className="app-notes-exit-copy">Repeat the action within 3 seconds to discard.</p>
+        <p className="app-notes-exit-copy">
+          {discardAction === 'escape'
+            ? 'Press Esc again to discard (within 3 seconds).'
+            : 'Click again to discard (within 3 seconds).'}
+        </p>
       </div>
       <span aria-hidden="true" className="app-notes-exit-count">{secondsLeft}</span>
     </div>
