@@ -1,0 +1,41 @@
+@import "../../assets/app-notes.css";
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+::selection {
+  background: #dbeafe;
+}
+
+.app-notes-card-actions {
+  opacity: 0;
+}
+
+.app-notes-page-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.app-notes-page-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.group:focus-within .app-notes-card-actions {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .group:hover .app-notes-card-actions {
+    opacity: 1;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .app-notes-card-actions {
+    opacity: 1;
+  }
+}

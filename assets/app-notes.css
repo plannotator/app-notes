@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-soft: #eff6ff;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f8fafc;
+  --color-surface-2: #f1f5f9;
+  --color-border-subtle: rgba(15, 23, 42, 0.10);
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-tertiary: #64748b;
+  --color-danger: #dc2626;
+}
+
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  font-synthesis: none;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(15, 23, 42, 0.78);
+  outline-offset: 2px;
+}
+
+.app-notes-count {
+  min-width: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-notes-pressable:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+@media (pointer: coarse) {
+  .app-notes-touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+  }
+}
