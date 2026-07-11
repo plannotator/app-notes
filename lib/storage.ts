@@ -39,6 +39,8 @@ export interface AnnotationStorage {
   readonly getAnnotations: (url: string) => Promise<Annotation[]>;
   /** Read and parse annotations from every page on a website. */
   readonly getSiteAnnotations: (url: string) => Promise<Annotation[]>;
+  /** Read and parse annotations from every website. */
+  readonly getAllAnnotations: () => Promise<Annotation[]>;
   /** Execute one mutation after all earlier mutations on this instance settle. */
   readonly execute: (command: AnnotationMutationCommand) => Promise<AnnotationMutationResult>;
 }
@@ -114,6 +116,7 @@ export function createAnnotationStorage(
   return {
     getAnnotations: (url) => readAnnotations(area, url),
     getSiteAnnotations: (url) => readSiteAnnotations(area, url),
+    getAllAnnotations: () => readAllAnnotations(area),
     execute,
   };
 }
@@ -180,6 +183,11 @@ export async function getAnnotations(url: string): Promise<Annotation[]> {
 /** Read every parsed annotation stored for the URL's website. */
 export async function getSiteAnnotations(url: string): Promise<Annotation[]> {
   return readSiteAnnotations(browser.storage.local, url);
+}
+
+/** Read every parsed annotation stored by the extension. */
+export async function getAllAnnotations(): Promise<Annotation[]> {
+  return readAllAnnotations(browser.storage.local);
 }
 
 /** Send a create command to the background annotation writer. */
@@ -296,13 +304,25 @@ async function readSiteAnnotations(
   const annotations: Annotation[] = [];
   for (const [key, value] of Object.entries(result)) {
     if (!key.startsWith(prefix)) continue;
-    annotations.push(
-      ...parseAnnotations(value).filter(
-        (annotation) => getAnnotationStorageKeyForUrl(annotation.url) === key,
-      ),
-    );
+    annotations.push(...readStorageEntryAnnotations(key, value));
   }
   return annotations;
+}
+
+async function readAllAnnotations(area: AnnotationStorageArea): Promise<Annotation[]> {
+  const result = await area.get(null);
+  const annotations: Annotation[] = [];
+  for (const [key, value] of Object.entries(result)) {
+    if (!key.startsWith('annotations:')) continue;
+    annotations.push(...readStorageEntryAnnotations(key, value));
+  }
+  return annotations;
+}
+
+function readStorageEntryAnnotations(key: string, value: unknown): Annotation[] {
+  return parseAnnotations(value).filter(
+    (annotation) => getAnnotationStorageKeyForUrl(annotation.url) === key,
+  );
 }
 
 async function createAnnotation(

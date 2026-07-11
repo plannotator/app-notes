@@ -20,6 +20,12 @@ body {
   z-index: 1;
 }
 
+.app-notes-global-site-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 .app-notes-page-count {
   font-variant-numeric: tabular-nums;
 }
@@ -31,6 +37,10 @@ body {
 @media (hover: hover) and (pointer: fine) {
   .group:hover .app-notes-card-actions {
     opacity: 1;
+  }
+
+  .app-notes-global-row:hover {
+    background: var(--color-surface-hover);
   }
 }
 

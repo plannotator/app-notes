@@ -112,6 +112,24 @@ describe('annotation storage', () => {
     ]);
   });
 
+  test('reads valid annotations across every website', async () => {
+    const area = new InMemoryStorageArea();
+    const financeUrl = 'https://www.yahoo.com/finance';
+    const docsUrl = 'https://docs.example.com/start';
+    const mismatched = annotationFixture('mismatched', 'wrong key', docsUrl);
+    area.seed(getRequiredKey(PAGE_URL), [annotationFixture('news', 'news note'), mismatched]);
+    area.seed(getRequiredKey(financeUrl), [annotationFixture('finance', 'finance note', financeUrl)]);
+    area.seed(getRequiredKey(docsUrl), [annotationFixture('docs', 'docs note', docsUrl)]);
+    area.seed('unrelated-setting', { enabled: true });
+    const storage = createAnnotationStorage(area, deterministicDependencies([]));
+
+    expect((await storage.getAllAnnotations()).map(({ id }) => id).sort()).toEqual([
+      'docs',
+      'finance',
+      'news',
+    ]);
+  });
+
   test('clears every annotated page on one website and preserves other sites', async () => {
     const area = new InMemoryStorageArea();
     const financeUrl = 'https://www.yahoo.com/finance';

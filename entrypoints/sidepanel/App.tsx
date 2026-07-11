@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   Check,
+  ChevronRight,
   Copy,
   Download,
   Files,
+  Library,
   MessageSquare,
   MousePointer2,
   Pencil,
@@ -16,6 +19,7 @@ import {
   clearSiteAnnotations,
   deleteAnnotation,
   exportSiteAnnotations,
+  getAllAnnotations,
   getSiteAnnotations,
   groupAnnotationsByPage,
   updateAnnotation,
@@ -30,6 +34,8 @@ interface PanelSite {
   readonly tabId: number;
 }
 
+type PanelView = 'site' | 'all';
+
 function sortNewestFirst(annotations: ReadonlyArray<Annotation>): ReadonlyArray<Annotation> {
   return [...annotations].sort((left, right) => right.updatedAt - left.updatedAt);
 }
@@ -37,12 +43,16 @@ function sortNewestFirst(annotations: ReadonlyArray<Annotation>): ReadonlyArray<
 /** The current-website management surface for every saved note across its pages. */
 export function SidePanelApp() {
   const [site, setSite] = useState<PanelSite | null>(null);
+  const [view, setView] = useState<PanelView>('site');
+  const [allAnnotations, setAllAnnotations] = useState<ReadonlyArray<Annotation> | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState('');
   const siteRef = useRef<PanelSite | null>(null);
+  const viewRef = useRef<PanelView>('site');
   const loadGenerationRef = useRef(0);
+  const allLoadGenerationRef = useRef(0);
   const activeTabRequestRef = useRef(0);
   const editSessionRef = useRef(0);
   const copiedTimerRef = useRef<number | null>(null);
@@ -57,6 +67,33 @@ export function SidePanelApp() {
     siteRef.current = next;
     setSite(next);
   }, []);
+
+  const showSiteView = useCallback(() => {
+    viewRef.current = 'site';
+    setView('site');
+    setStatus('');
+  }, []);
+
+  const refreshAllAnnotations = useCallback(async () => {
+    const generation = ++allLoadGenerationRef.current;
+    try {
+      const annotations = await getAllAnnotations();
+      if (generation !== allLoadGenerationRef.current || viewRef.current !== 'all') return;
+      setAllAnnotations(sortNewestFirst(annotations));
+    } catch {
+      if (generation === allLoadGenerationRef.current && viewRef.current === 'all') {
+        setStatus('Couldn’t load all notes.');
+      }
+    }
+  }, []);
+
+  const showAllView = useCallback(() => {
+    viewRef.current = 'all';
+    setView('all');
+    cancelEditing();
+    setStatus('');
+    refreshAllAnnotations().catch(() => undefined);
+  }, [cancelEditing, refreshAllAnnotations]);
 
   const loadSite = useCallback(async (tabId: number, href: string) => {
     const storagePrefix = getAnnotationStoragePrefixForUrl(href);
@@ -127,9 +164,17 @@ export function SidePanelApp() {
       changes: Record<string, { readonly newValue?: unknown }>,
       areaName: string,
     ) => {
+      if (areaName !== 'local') return;
+      const annotationKeys = Object.keys(changes).filter((key) => key.startsWith('annotations:'));
+      if (annotationKeys.length === 0) return;
+
+      if (viewRef.current === 'all') {
+        refreshAllAnnotations().catch(() => undefined);
+      }
+
       const current = siteRef.current;
-      if (areaName !== 'local' || !current?.storagePrefix) return;
-      if (!Object.keys(changes).some((key) => key.startsWith(current.storagePrefix!))) return;
+      if (!current?.storagePrefix) return;
+      if (!annotationKeys.some((key) => key.startsWith(current.storagePrefix!))) return;
 
       const generation = ++loadGenerationRef.current;
       getSiteAnnotations(current.href)
@@ -160,7 +205,7 @@ export function SidePanelApp() {
       browser.webNavigation.onHistoryStateUpdated.removeListener(handleHistoryNavigation);
       browser.storage.onChanged.removeListener(handleStorageChange);
     };
-  }, [commitSite, loadActiveTab, loadSite]);
+  }, [commitSite, loadActiveTab, loadSite, refreshAllAnnotations]);
 
   useEffect(() => () => {
     if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
@@ -263,8 +308,24 @@ export function SidePanelApp() {
     }
   };
 
+  const handleOpenAnnotation = async (annotation: Annotation) => {
+    const currentSite = siteRef.current;
+    if (!currentSite) return;
+
+    try {
+      if (currentSite.href !== annotation.url) {
+        await browser.tabs.update(currentSite.tabId, { url: annotation.url });
+      }
+      await loadSite(currentSite.tabId, annotation.url);
+      showSiteView();
+    } catch {
+      setStatus('Couldn’t open that note’s page.');
+    }
+  };
+
   const annotations = site?.annotations ?? [];
   const groups = buildPanelGroups(annotations);
+  const globalAnnotations = allAnnotations ?? [];
   const pageUnavailable = site !== null && site.storagePrefix === null;
   const domain = (() => {
     try {
@@ -276,22 +337,64 @@ export function SidePanelApp() {
 
   return (
     <main className="flex h-screen flex-col bg-surface">
-      <header className="border-b border-border-subtle px-4 py-3.5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-sm font-semibold tracking-[-0.012em] text-text-primary">App Notes</h1>
-            <p className="mt-0.5 truncate text-xs text-text-secondary">{domain} · all pages</p>
+      {view === 'all' ? (
+        <header className="border-b border-border-subtle px-3 py-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Back to current site notes"
+              title="Back to current site"
+              onClick={showSiteView}
+              className="app-notes-pressable app-notes-touch-target grid h-8 w-8 shrink-0 place-items-center rounded-lg text-text-secondary transition-[background-color,color,transform] hover:bg-surface-hover hover:text-text-primary"
+            >
+              <ArrowLeft aria-hidden="true" size={15} />
+            </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm font-semibold tracking-[-0.012em] text-text-primary">All notes</h1>
+              <p className="mt-0.5 truncate text-xs text-text-secondary">Across every site</p>
+            </div>
+            {allAnnotations !== null && (
+              <span
+                className="app-notes-count inline-flex h-6 items-center justify-center rounded-full bg-surface-2 px-2 text-xs font-semibold text-text-secondary"
+                aria-label={`${globalAnnotations.length} ${globalAnnotations.length === 1 ? 'note' : 'notes'}`}
+              >
+                {globalAnnotations.length}
+              </span>
+            )}
           </div>
-          <span
-            className="app-notes-count inline-flex h-6 items-center justify-center rounded-full bg-accent-soft px-2 text-xs font-semibold text-accent"
-            aria-label={`${annotations.length} ${annotations.length === 1 ? 'note' : 'notes'}`}
-          >
-            {annotations.length}
-          </span>
-        </div>
-      </header>
+        </header>
+      ) : (
+        <header className="border-b border-border-subtle px-4 py-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm font-semibold tracking-[-0.012em] text-text-primary">App Notes</h1>
+              <p className="mt-0.5 truncate text-xs text-text-secondary">{domain} · all pages</p>
+            </div>
+            <button
+              type="button"
+              onClick={showAllView}
+              className="app-notes-pressable app-notes-touch-target inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-text-secondary transition-[background-color,color,transform] hover:bg-surface-hover hover:text-text-primary"
+            >
+              <Library aria-hidden="true" size={13} />
+              <span>All notes</span>
+            </button>
+            <span
+              className="app-notes-count inline-flex h-6 items-center justify-center rounded-full bg-accent-soft px-2 text-xs font-semibold text-accent"
+              aria-label={`${annotations.length} ${annotations.length === 1 ? 'note' : 'notes'}`}
+            >
+              {annotations.length}
+            </span>
+          </div>
+        </header>
+      )}
 
-      <section className="min-h-0 flex-1 overflow-y-auto" aria-label="Site notes">
+      {view === 'all' ? (
+        <AllNotesPage
+          annotations={allAnnotations}
+          onOpenAnnotation={handleOpenAnnotation}
+        />
+      ) : (
+        <section className="min-h-0 flex-1 overflow-y-auto" aria-label="Site notes">
         {annotations.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-7 py-16 text-center">
             <span className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-accent-soft text-accent">
@@ -345,9 +448,10 @@ export function SidePanelApp() {
             ))}
           </div>
         )}
-      </section>
+        </section>
+      )}
 
-      {annotations.length > 0 && (
+      {view === 'site' && annotations.length > 0 && (
         <footer className="border-t border-border-subtle bg-surface px-4 py-3">
           <div className="grid grid-cols-2 gap-2">
             <FooterButton onClick={handleCopyAll} icon={copied ? <Check size={14} /> : <Copy size={14} />}>
@@ -378,6 +482,88 @@ export function SidePanelApp() {
         {status}
       </p>
     </main>
+  );
+}
+
+interface AllNotesPageProps {
+  readonly annotations: ReadonlyArray<Annotation> | null;
+  readonly onOpenAnnotation: (annotation: Annotation) => void | Promise<void>;
+}
+
+function AllNotesPage({ annotations, onOpenAnnotation }: AllNotesPageProps) {
+  if (annotations === null) {
+    return (
+      <section
+        className="flex min-h-0 flex-1 items-center justify-center px-6 text-xs text-text-tertiary"
+        aria-label="All notes"
+      >
+        Loading notes…
+      </section>
+    );
+  }
+
+  if (annotations.length === 0) {
+    return (
+      <section
+        className="flex min-h-0 flex-1 flex-col items-center justify-center px-7 text-center"
+        aria-label="All notes"
+      >
+        <span className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-surface-2 text-text-secondary">
+          <Library aria-hidden="true" size={19} strokeWidth={2} />
+        </span>
+        <h2 className="text-sm font-medium text-text-primary">No notes yet</h2>
+        <p className="mt-1 max-w-[240px] text-xs leading-5 text-text-secondary">
+          Notes from every site will collect here.
+        </p>
+      </section>
+    );
+  }
+
+  const groups = buildGlobalGroups(annotations);
+  return (
+    <section className="min-h-0 flex-1 overflow-y-auto" aria-label="All notes">
+      {groups.map((group) => (
+        <section key={group.siteId} aria-labelledby={`site-${group.id}`}>
+          <div className="app-notes-global-site-heading flex items-center gap-2 border-b border-border-subtle bg-surface-2 px-4 py-2">
+            <h2
+              id={`site-${group.id}`}
+              className="min-w-0 flex-1 truncate text-[11px] font-semibold text-text-secondary"
+              title={group.siteId}
+            >
+              {group.label}
+            </h2>
+            <span
+              className="app-notes-page-count text-[10px] text-text-tertiary"
+              aria-label={`${group.annotations.length} ${group.annotations.length === 1 ? 'note' : 'notes'} on this site`}
+            >
+              {group.annotations.length}
+            </span>
+          </div>
+          <div className="divide-y divide-border-subtle">
+            {group.annotations.map((annotation) => (
+              <button
+                key={annotation.id}
+                type="button"
+                title={annotation.url}
+                onClick={() => onOpenAnnotation(annotation)}
+                className="app-notes-global-row app-notes-pressable app-notes-touch-target flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-[background-color,transform]"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-[10px] leading-4 text-text-tertiary">
+                    <span className="min-w-0 flex-1 truncate font-mono">{getPageLabel(annotation.url)}</span>
+                    <span className="shrink-0">{getRelativeTime(annotation.updatedAt)}</span>
+                  </div>
+                  <p className="mt-0.5 truncate text-xs leading-5 text-text-primary">
+                    {annotation.note}
+                  </p>
+                </div>
+                <ChevronRight aria-hidden="true" className="shrink-0 text-text-tertiary" size={14} />
+              </button>
+            ))}
+          </div>
+        </section>
+      ))}
+    </section>
   );
 }
 
@@ -524,6 +710,44 @@ interface PanelPageGroup {
   readonly id: string;
   readonly label: string;
   readonly pageId: string;
+}
+
+interface GlobalSiteGroup {
+  readonly annotations: ReadonlyArray<Annotation>;
+  readonly id: string;
+  readonly label: string;
+  readonly siteId: string;
+}
+
+function buildGlobalGroups(
+  annotations: ReadonlyArray<Annotation>,
+): ReadonlyArray<GlobalSiteGroup> {
+  const groups = new Map<string, { label: string; annotations: Annotation[] }>();
+  for (const annotation of annotations) {
+    try {
+      const parsed = new URL(annotation.url);
+      const group = groups.get(parsed.origin) ?? { label: parsed.host, annotations: [] };
+      group.annotations.push(annotation);
+      groups.set(parsed.origin, group);
+    } catch {
+      // Persisted annotations are parsed before reaching this view.
+    }
+  }
+
+  return [...groups.entries()]
+    .map(([siteId, group]) => ({
+      siteId,
+      label: group.label,
+      annotations: sortNewestFirst(group.annotations),
+      latestUpdate: Math.max(...group.annotations.map(({ updatedAt }) => updatedAt)),
+    }))
+    .sort((left, right) => right.latestUpdate - left.latestUpdate)
+    .map((group, index) => ({
+      siteId: group.siteId,
+      label: group.label,
+      annotations: group.annotations,
+      id: String(index),
+    }));
 }
 
 function buildPanelGroups(
