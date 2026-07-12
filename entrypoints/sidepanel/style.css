@@ -6,10 +6,6 @@ body {
   color: var(--color-text-primary);
 }
 
-::selection {
-  background: #dbeafe;
-}
-
 .app-notes-card-actions {
   opacity: 0;
 }

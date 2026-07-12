@@ -78,7 +78,7 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 
 - [ ] Test a conventional multi-page site, a React/Vue SPA, Yahoo, Hacker News, and a page with open Shadow DOM.
 - [ ] Restricted browser pages fail gracefully without broken controls.
-- [ ] Popup, composer, toast, markers, and notes workspace remain legible in light and dark host pages.
+- [ ] Switch the operating system/browser between light and dark appearance; popup, composer, toast, markers, and notes workspace update automatically and remain legible on both light and dark host pages.
 - [ ] Keyboard focus order, visible focus, screen-reader labels, and 200% zoom are usable.
 - [ ] Reduced-motion mode avoids unnecessary motion.
 - [ ] No extension errors appear during the tested flows.

@@ -493,7 +493,7 @@ export function SidePanelApp() {
           <button
             type="button"
             onClick={handleClearAll}
-            className="app-notes-pressable app-notes-touch-target mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-danger transition-[background-color,transform] hover:bg-red-50"
+            className="app-notes-pressable app-notes-touch-target mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-danger transition-[background-color,transform] hover:bg-danger-soft"
           >
             <Trash2 aria-hidden="true" size={13} />
             <span>Clear site notes</span>
@@ -641,7 +641,7 @@ function AnnotationCard({
             type="button"
             aria-label={`Delete note on ${annotation.anchor.label}`}
             onClick={onDelete}
-            className="app-notes-pressable app-notes-touch-target grid h-8 w-8 place-items-center rounded-lg text-text-tertiary transition-colors hover:bg-red-50 hover:text-danger"
+            className="app-notes-pressable app-notes-touch-target grid h-8 w-8 place-items-center rounded-lg text-text-tertiary transition-colors hover:bg-danger-soft hover:text-danger"
           >
             <Trash2 aria-hidden="true" size={13} />
           </button>
@@ -673,7 +673,7 @@ function AnnotationCard({
               }
               if (event.key === 'Escape') onCancelEdit();
             }}
-            className="mt-1 min-h-20 w-full resize-y rounded-lg bg-surface p-2.5 text-sm leading-5 text-text-primary shadow-[inset_0_0_0_1px_rgba(15,23,42,0.12)]"
+            className="mt-1 min-h-20 w-full resize-y rounded-lg bg-surface p-2.5 text-sm leading-5 text-text-primary shadow-[inset_0_0_0_1px_var(--color-field-border)]"
             rows={3}
             autoFocus
           />
@@ -682,7 +682,7 @@ function AnnotationCard({
               type="button"
               onClick={onSaveEdit}
               disabled={editText.trim().length === 0}
-              className="app-notes-pressable app-notes-touch-target min-h-8 rounded-lg bg-accent px-3 text-[11px] font-semibold text-white transition-[background-color,transform] hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="app-notes-pressable app-notes-touch-target min-h-8 rounded-lg bg-accent-solid px-3 text-[11px] font-semibold text-white transition-[background-color,transform] hover:bg-accent-solid-hover disabled:cursor-not-allowed disabled:bg-control-disabled"
             >
               Save note
             </button>
@@ -719,7 +719,7 @@ function FooterButton({
     <button
       type="button"
       onClick={onClick}
-      className="app-notes-pressable app-notes-touch-target flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-surface px-3 text-xs font-medium text-text-secondary shadow-[inset_0_0_0_1px_rgba(15,23,42,0.1)] transition-[background-color,color,transform] hover:bg-surface-hover hover:text-text-primary"
+      className="app-notes-pressable app-notes-touch-target flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-surface px-3 text-xs font-medium text-text-secondary shadow-[inset_0_0_0_1px_var(--color-border-subtle)] transition-[background-color,color,transform] hover:bg-surface-hover hover:text-text-primary"
     >
       <span aria-hidden="true">{icon}</span>
       <span>{children}</span>

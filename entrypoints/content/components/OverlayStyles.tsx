@@ -8,18 +8,62 @@ const OVERLAY_STYLES = `
   .app-notes-root {
     --an-accent: #2563eb;
     --an-accent-hover: #1d4ed8;
+    --an-accent-solid: #2563eb;
     --an-accent-soft: #eff6ff;
+    --an-on-accent: #fff;
     --an-ink: #0f172a;
     --an-secondary: #475569;
     --an-muted: #64748b;
     --an-separator: rgba(15, 23, 42, 0.11);
     --an-surface: rgba(255, 255, 255, 0.97);
+    --an-surface-solid: #fff;
+    --an-surface-subtle: #f8fafc;
+    --an-surface-muted: #f1f5f9;
+    --an-focus: rgba(15, 23, 42, 0.78);
+    --an-danger: #b91c1c;
+    --an-disabled: #94a3b8;
+    --an-marker-ring: #fff;
+    --an-shadow-elevated: 0 8px 24px rgba(15, 23, 42, 0.13), 0 2px 7px rgba(15, 23, 42, 0.08);
+    --an-shadow-label: 0 1px 2px rgba(15, 23, 42, 0.18);
+    --an-shadow-badge: 0 2px 5px rgba(15, 23, 42, 0.2);
+    --an-shadow-key: inset 0 0 0 1px rgba(15, 23, 42, 0.09), inset 0 -1px 0 rgba(15, 23, 42, 0.08);
+    --an-shadow-button: 0 1px 2px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.16);
     color: var(--an-ink);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
     font-size: 14px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :host {
+      color-scheme: dark;
+    }
+
+    .app-notes-root {
+      --an-accent: #7aa2f7;
+      --an-accent-hover: #1d4ed8;
+      --an-accent-solid: #2563eb;
+      --an-accent-soft: #172554;
+      --an-ink: #f1f5f9;
+      --an-secondary: #b6c2d0;
+      --an-muted: #8996a8;
+      --an-separator: #2a3442;
+      --an-surface: rgba(16, 20, 28, 0.97);
+      --an-surface-solid: #10141c;
+      --an-surface-subtle: #171d27;
+      --an-surface-muted: #1b2430;
+      --an-focus: rgba(255, 255, 255, 0.88);
+      --an-danger: #f87171;
+      --an-disabled: #475569;
+      --an-marker-ring: #10141c;
+      --an-shadow-elevated: 0 12px 30px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.32);
+      --an-shadow-label: 0 1px 3px rgba(0, 0, 0, 0.36);
+      --an-shadow-badge: 0 2px 6px rgba(0, 0, 0, 0.42);
+      --an-shadow-key: inset 0 0 0 1px #344052, inset 0 -1px 0 #10141c;
+      --an-shadow-button: 0 1px 3px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    }
   }
 
   .app-notes-root,
@@ -59,9 +103,9 @@ const OVERLAY_STYLES = `
     max-width: min(300px, calc(100vw - 16px));
     overflow: hidden;
     border-radius: 5px;
-    background: var(--an-accent);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
-    color: #fff;
+    background: var(--an-accent-solid);
+    box-shadow: var(--an-shadow-label);
+    color: var(--an-on-accent);
     font-family: "SF Mono", "Cascadia Code", Menlo, monospace;
     font-size: 11px;
     font-weight: 600;
@@ -89,11 +133,11 @@ const OVERLAY_STYLES = `
     width: 18px;
     height: 18px;
     place-items: center;
-    border: 2px solid #fff;
+    border: 2px solid var(--an-marker-ring);
     border-radius: 999px;
-    background: var(--an-accent);
-    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.2);
-    color: #fff;
+    background: var(--an-accent-solid);
+    box-shadow: var(--an-shadow-badge);
+    color: var(--an-on-accent);
   }
 
   .app-notes-popover {
@@ -108,8 +152,7 @@ const OVERLAY_STYLES = `
     background: var(--an-surface);
     box-shadow:
       0 0 0 1px var(--an-separator),
-      0 8px 24px rgba(15, 23, 42, 0.13),
-      0 2px 7px rgba(15, 23, 42, 0.08);
+      var(--an-shadow-elevated);
     backdrop-filter: blur(16px) saturate(135%);
     color: var(--an-ink);
     pointer-events: auto;
@@ -248,7 +291,7 @@ const OVERLAY_STYLES = `
     border: 0;
     border-radius: 10px;
     padding: 10px 11px;
-    background: #f8fafc;
+    background: var(--an-surface-subtle);
     box-shadow: inset 0 0 0 1px var(--an-separator);
     color: var(--an-ink);
     font-size: 14px;
@@ -258,19 +301,19 @@ const OVERLAY_STYLES = `
   }
 
   .app-notes-editor::placeholder {
-    color: #64748b;
+    color: var(--an-muted);
   }
 
   .app-notes-editor:focus-visible {
-    outline: 2px solid rgba(15, 23, 42, 0.72);
+    outline: 2px solid var(--an-focus);
     outline-offset: 2px;
-    background: #fff;
+    background: var(--an-surface-solid);
   }
 
   .app-notes-popover-error {
     min-height: 16px;
     margin: 6px 1px -2px;
-    color: #b91c1c;
+    color: var(--an-danger);
     font-size: 11px;
     line-height: 16px;
   }
@@ -300,8 +343,8 @@ const OVERLAY_STYLES = `
     border-radius: 5px;
     margin-right: 3px;
     padding: 0 5px;
-    background: #f1f5f9;
-    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.09), inset 0 -1px 0 rgba(15, 23, 42, 0.08);
+    background: var(--an-surface-muted);
+    box-shadow: var(--an-shadow-key);
     color: var(--an-secondary);
     font-family: "SF Mono", "Cascadia Code", Menlo, monospace;
     font-size: 10px;
@@ -318,9 +361,9 @@ const OVERLAY_STYLES = `
     border: 0;
     border-radius: 9px;
     padding: 8px 12px;
-    background: var(--an-accent);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.16);
-    color: #fff;
+    background: var(--an-accent-solid);
+    box-shadow: var(--an-shadow-button);
+    color: var(--an-on-accent);
     cursor: pointer;
     font-size: 12px;
     font-weight: 650;
@@ -329,15 +372,15 @@ const OVERLAY_STYLES = `
   }
 
   .app-notes-primary-button:disabled {
-    background: #94a3b8;
+    background: var(--an-disabled);
     box-shadow: none;
-    color: #fff;
+    color: var(--an-on-accent);
     cursor: not-allowed;
   }
 
   .app-notes-icon-button:focus-visible,
   .app-notes-primary-button:focus-visible {
-    outline: 2px solid rgba(15, 23, 42, 0.8);
+    outline: 2px solid var(--an-focus);
     outline-offset: 2px;
   }
 
@@ -355,8 +398,7 @@ const OVERLAY_STYLES = `
     background: var(--an-surface);
     box-shadow:
       0 0 0 1px var(--an-separator),
-      0 8px 22px rgba(15, 23, 42, 0.13),
-      0 2px 6px rgba(15, 23, 42, 0.07);
+      var(--an-shadow-elevated);
     backdrop-filter: blur(14px) saturate(130%);
     color: var(--an-ink);
     pointer-events: none;
@@ -399,8 +441,8 @@ const OVERLAY_STYLES = `
     height: 24px;
     place-items: center;
     border-radius: 999px;
-    background: var(--an-accent);
-    color: #fff;
+    background: var(--an-accent-solid);
+    color: var(--an-on-accent);
     font-size: 11px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -408,7 +450,7 @@ const OVERLAY_STYLES = `
 
   @media (hover: hover) and (pointer: fine) {
     .app-notes-icon-button:hover {
-      background: #f1f5f9;
+      background: var(--an-surface-muted);
       color: var(--an-ink);
     }
 
@@ -450,20 +492,20 @@ const OVERLAY_STYLES = `
   @media (prefers-reduced-transparency: reduce) {
     .app-notes-popover,
     .app-notes-exit-toast {
-      background: #fff;
+      background: var(--an-surface-solid);
       backdrop-filter: none;
     }
 
     .app-notes-popover-arrow {
-      background: #fff;
+      background: var(--an-surface-solid);
     }
   }
 
   @media (prefers-contrast: more) {
     .app-notes-popover,
     .app-notes-exit-toast {
-      background: #fff;
-      box-shadow: 0 0 0 2px #0f172a, 0 8px 24px rgba(15, 23, 42, 0.16);
+      background: var(--an-surface-solid);
+      box-shadow: 0 0 0 2px var(--an-ink), var(--an-shadow-elevated);
     }
   }
 `;

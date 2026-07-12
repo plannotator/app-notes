@@ -245,7 +245,7 @@ function MenuItem({
         active
           ? 'bg-accent-soft text-accent'
           : danger
-            ? 'text-danger hover:bg-red-50'
+            ? 'text-danger hover:bg-danger-soft'
             : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
       }`}
     >
@@ -262,7 +262,7 @@ function Kbd({ keys }: { readonly keys: ReadonlyArray<string> }) {
       {keys.map((key) => (
         <kbd
           key={key}
-          className="min-w-[18px] rounded-[5px] bg-surface-2 px-1 py-1 text-center font-mono text-[9px] leading-none text-text-secondary shadow-[inset_0_0_0_1px_rgba(15,23,42,0.08),inset_0_-1px_0_rgba(15,23,42,0.08)]"
+          className="min-w-[18px] rounded-[5px] bg-surface-2 px-1 py-1 text-center font-mono text-[9px] leading-none text-text-secondary shadow-[inset_0_0_0_1px_var(--color-field-border),inset_0_-1px_0_var(--color-border-subtle)]"
         >
           {key}
         </kbd>

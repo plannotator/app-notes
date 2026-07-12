@@ -2,22 +2,51 @@
 
 @theme {
   --color-accent: #2563eb;
-  --color-accent-hover: #1d4ed8;
+  --color-accent-solid: #2563eb;
+  --color-accent-solid-hover: #1d4ed8;
   --color-accent-soft: #eff6ff;
   --color-surface: #ffffff;
   --color-surface-hover: #f8fafc;
   --color-surface-2: #f1f5f9;
   --color-border-subtle: rgba(15, 23, 42, 0.10);
+  --color-field-border: rgba(15, 23, 42, 0.12);
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
   --color-text-tertiary: #64748b;
   --color-danger: #dc2626;
+  --color-danger-soft: #fef2f2;
+  --color-control-disabled: #94a3b8;
+  --color-selection: #dbeafe;
+  --color-focus-ring: rgba(15, 23, 42, 0.78);
 }
 
 :root {
   color-scheme: light;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   font-synthesis: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-accent: #7aa2f7;
+    --color-accent-solid: #2563eb;
+    --color-accent-solid-hover: #1d4ed8;
+    --color-accent-soft: #172554;
+    --color-surface: #10141c;
+    --color-surface-hover: #171d27;
+    --color-surface-2: #1b2430;
+    --color-border-subtle: #2a3442;
+    --color-field-border: #344052;
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #b6c2d0;
+    --color-text-tertiary: #8996a8;
+    --color-danger: #f87171;
+    --color-danger-soft: #2a171b;
+    --color-control-disabled: #475569;
+    --color-selection: #1e3a5f;
+    --color-focus-ring: rgba(255, 255, 255, 0.88);
+  }
 }
 
 *,
@@ -31,6 +60,10 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+::selection {
+  background: var(--color-selection);
+}
+
 button,
 textarea {
   font: inherit;
@@ -42,7 +75,7 @@ button {
 
 button:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid rgba(15, 23, 42, 0.78);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
