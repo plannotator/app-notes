@@ -281,6 +281,105 @@ const OVERLAY_STYLES = `
     white-space: nowrap;
   }
 
+  .app-notes-capture-button {
+    display: flex;
+    width: 100%;
+    min-height: 36px;
+    align-items: center;
+    gap: 7px;
+    border: 0;
+    border-radius: 9px;
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    background: var(--an-surface-subtle);
+    box-shadow: inset 0 0 0 1px var(--an-separator);
+    color: var(--an-secondary);
+    cursor: pointer;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 16px;
+    transition: background-color 120ms ease, color 120ms ease, transform 100ms ease-out;
+  }
+
+  .app-notes-capture-button:disabled,
+  .app-notes-screenshot-action:disabled,
+  .app-notes-screenshot-remove:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .app-notes-capture-hint {
+    margin-left: auto;
+    color: var(--an-muted);
+    font-family: "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 9.5px;
+    font-weight: 500;
+  }
+
+  .app-notes-screenshot-preview {
+    overflow: hidden;
+    border-radius: 10px;
+    margin: 0 0 10px;
+    background: var(--an-surface-subtle);
+    box-shadow: inset 0 0 0 1px var(--an-separator);
+  }
+
+  .app-notes-screenshot-preview img {
+    display: block;
+    width: 100%;
+    height: 112px;
+    object-fit: contain;
+    background: var(--an-surface-muted);
+  }
+
+  .app-notes-screenshot-preview figcaption {
+    display: flex;
+    min-height: 32px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 7px 5px 10px;
+    color: var(--an-muted);
+    font-family: "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 9.5px;
+    line-height: 14px;
+  }
+
+  .app-notes-screenshot-actions,
+  .app-notes-screenshot-action {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .app-notes-screenshot-actions {
+    gap: 2px;
+  }
+
+  .app-notes-screenshot-action,
+  .app-notes-screenshot-remove {
+    min-height: 24px;
+    border: 0;
+    border-radius: 6px;
+    padding: 0 6px;
+    background: transparent;
+    color: var(--an-secondary);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease, transform 100ms ease-out;
+  }
+
+  .app-notes-screenshot-action {
+    gap: 4px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .app-notes-screenshot-remove {
+    display: grid;
+    width: 24px;
+    place-items: center;
+  }
+
   .app-notes-editor {
     display: block;
     width: 100%;
@@ -379,6 +478,9 @@ const OVERLAY_STYLES = `
   }
 
   .app-notes-icon-button:focus-visible,
+  .app-notes-capture-button:focus-visible,
+  .app-notes-screenshot-action:focus-visible,
+  .app-notes-screenshot-remove:focus-visible,
   .app-notes-primary-button:focus-visible {
     outline: 2px solid var(--an-focus);
     outline-offset: 2px;
@@ -457,15 +559,28 @@ const OVERLAY_STYLES = `
     .app-notes-primary-button:not(:disabled):hover {
       background: var(--an-accent-hover);
     }
+
+    .app-notes-capture-button:not(:disabled):hover,
+    .app-notes-screenshot-action:not(:disabled):hover,
+    .app-notes-screenshot-remove:not(:disabled):hover {
+      background: var(--an-surface-muted);
+      color: var(--an-ink);
+    }
   }
 
   .app-notes-icon-button:active,
+  .app-notes-capture-button:not(:disabled):active,
+  .app-notes-screenshot-action:not(:disabled):active,
+  .app-notes-screenshot-remove:not(:disabled):active,
   .app-notes-primary-button:not(:disabled):active {
     transform: scale(0.97);
   }
 
   @media (pointer: coarse) {
     .app-notes-icon-button,
+    .app-notes-capture-button,
+    .app-notes-screenshot-action,
+    .app-notes-screenshot-remove,
     .app-notes-primary-button {
       min-width: 44px;
       min-height: 44px;
@@ -483,6 +598,9 @@ const OVERLAY_STYLES = `
     }
 
     .app-notes-icon-button,
+    .app-notes-capture-button,
+    .app-notes-screenshot-action,
+    .app-notes-screenshot-remove,
     .app-notes-editor,
     .app-notes-primary-button {
       transition: none;

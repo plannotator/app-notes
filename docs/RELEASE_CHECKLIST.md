@@ -44,6 +44,8 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] Enabling annotations from the popup and keyboard shortcut works.
 - [ ] Hovering shows the correct element outline and readable label.
 - [ ] Clicking opens the note composer in a sensible position.
+- [ ] Capturing an element hides every App Notes overlay, produces a clean PNG of the visible selection, and shows a preview before save.
+- [ ] Retaking and removing a draft screenshot work; saving and reloading preserve the attached screenshot.
 - [ ] Saving by button and `Cmd/Ctrl+Enter` works; blank notes cannot be saved.
 - [ ] Clicking away once says the draft is safe in plain language; clicking again discards it.
 - [ ] `Esc` follows the same guarded-draft behavior.
@@ -69,7 +71,8 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] **All notes** remains progressively disclosed and shows notes across every site.
 - [ ] Opening a global note navigates to the correct page.
 - [ ] Copying all site notes produces readable Markdown with useful selected/nearby text, not only selectors.
-- [ ] Exporting downloads the same complete site-wide Markdown.
+- [ ] Copying notes with screenshots clearly explains that images are included through Export.
+- [ ] Exporting text-only notes downloads Markdown; exporting screenshot notes downloads one ZIP containing `notes.md` and every referenced PNG.
 - [ ] Hacker News smoke test: annotate two story titles and confirm their titles appear in the export.
 - [ ] Clearing site notes removes only that site's notes and requires confirmation.
 - [ ] The badge count reflects only the current page.
@@ -135,7 +138,7 @@ Apple reference: [package a Safari web extension](https://developer.apple.com/do
 - [ ] Chrome small promo tile at 440×280.
 - [ ] Store icon at 128×128 with sufficient transparent padding.
 - [ ] Plain reviewer notes explain that all data is local, how to enable annotations, how to open notes, and how to test multi-page persistence.
-- [ ] Permission explanations cover `storage`, `activeTab`, `tabs`, `webNavigation`, and Chrome's `sidePanel`.
+- [ ] Permission explanations cover `<all_urls>` for page annotation and visible-element capture, `storage`, `unlimitedStorage` for durable local screenshot blobs, `activeTab`, `tabs`, `webNavigation`, and Chrome's `sidePanel`.
 
 Chrome asset reference: [supplying images](https://developer.chrome.com/docs/webstore/images). Edge listing reference: [extension listing](https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension).
 

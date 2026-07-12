@@ -9,12 +9,14 @@ import type {
   Annotation,
   AnnotationCreatePayload,
   AnnotationMutationCommand,
+  AnnotationScreenshotCapture,
 } from './types';
 import type {
   AnnotationRuntimeTransport,
   AnnotationStorageArea,
   AnnotationStorageDependencies,
 } from './storage';
+import type { AnnotationScreenshotStore } from './screenshot-store';
 
 const PAGE_URL = 'https://www.yahoo.com/news';
 
@@ -239,6 +241,72 @@ describe('annotation storage', () => {
       'annotation-retry-safe',
     ]);
   });
+
+  test('persists and removes an attached screenshot with its annotation', async () => {
+    const area = new InMemoryStorageArea();
+    const screenshots = new InMemoryScreenshotStore();
+    const storage = createAnnotationStorage(
+      area,
+      deterministicDependencies([100], screenshots),
+    );
+    const payload: AnnotationCreatePayload = {
+      ...createPayload('screenshot note'),
+      screenshot: {
+        id: 'annotation-screenshot-note',
+        mimeType: 'image/png',
+        width: 320,
+        height: 180,
+        dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      },
+    };
+
+    const created = await storage.execute({
+      type: 'app-notes:annotation/create',
+      payload,
+    });
+
+    expect(created._tag).toBe('created');
+    expect((await storage.getAnnotations(PAGE_URL))[0]?.screenshot).toEqual({
+      id: payload.id,
+      mimeType: 'image/png',
+      width: 320,
+      height: 180,
+    });
+    expect(await screenshots.get(payload.id)).not.toBeNull();
+
+    expect(await storage.execute({
+      type: 'app-notes:annotation/delete',
+      url: PAGE_URL,
+      id: payload.id,
+    })).toEqual({ _tag: 'deleted', deleted: true });
+    expect(await screenshots.get(payload.id)).toBeNull();
+  });
+
+  test('clears attached screenshots with every note on a site', async () => {
+    const area = new InMemoryStorageArea();
+    const screenshots = new InMemoryScreenshotStore();
+    const storage = createAnnotationStorage(
+      area,
+      deterministicDependencies([100, 200], screenshots),
+    );
+    const payloads = [
+      createScreenshotPayload('first capture', PAGE_URL),
+      createScreenshotPayload('second capture', 'https://www.yahoo.com/finance'),
+    ];
+    for (const payload of payloads) {
+      await storage.execute({ type: 'app-notes:annotation/create', payload });
+    }
+    const firstId = payloads[0]?.id;
+    const secondId = payloads[1]?.id;
+    if (firstId === undefined || secondId === undefined) throw new Error('Missing screenshot fixtures');
+
+    expect(await storage.execute({
+      type: 'app-notes:annotation/clear-site',
+      url: PAGE_URL,
+    })).toEqual({ _tag: 'site-cleared', clearedPages: 2 });
+    expect(await screenshots.get(firstId)).toBeNull();
+    expect(await screenshots.get(secondId)).toBeNull();
+  });
 });
 
 describe('annotation runtime client', () => {
@@ -385,9 +453,29 @@ class RecordingTransport implements AnnotationRuntimeTransport {
   }
 }
 
-function deterministicDependencies(times: readonly number[]): AnnotationStorageDependencies {
+class InMemoryScreenshotStore implements AnnotationScreenshotStore {
+  private readonly blobs = new Map<string, Blob>();
+
+  async save(capture: AnnotationScreenshotCapture): Promise<void> {
+    this.blobs.set(capture.id, new Blob([capture.dataUrl], { type: capture.mimeType }));
+  }
+
+  async get(id: string): Promise<Blob | null> {
+    return this.blobs.get(id) ?? null;
+  }
+
+  async remove(ids: ReadonlyArray<string>): Promise<void> {
+    for (const id of ids) this.blobs.delete(id);
+  }
+}
+
+function deterministicDependencies(
+  times: readonly number[],
+  screenshots: AnnotationScreenshotStore = new InMemoryScreenshotStore(),
+): AnnotationStorageDependencies {
   const remainingTimes = [...times];
   return {
+    screenshots,
     now: () => {
       const time = remainingTimes.shift();
       if (time === undefined) throw new Error('Missing deterministic time');
@@ -416,6 +504,20 @@ function createPayload(note: string): AnnotationCreatePayload {
 
 function createCommand(note: string): AnnotationMutationCommand {
   return { type: 'app-notes:annotation/create', payload: createPayload(note) };
+}
+
+function createScreenshotPayload(note: string, url: string): AnnotationCreatePayload {
+  const payload = { ...createPayload(note), url };
+  return {
+    ...payload,
+    screenshot: {
+      id: payload.id,
+      mimeType: 'image/png',
+      width: 320,
+      height: 180,
+      dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+    },
+  };
 }
 
 function annotationFixture(id: string, note: string, url = PAGE_URL): Annotation {

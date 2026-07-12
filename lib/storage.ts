@@ -9,6 +9,7 @@ import {
   parseAnnotationMutationResult,
   parseAnnotations,
 } from './types';
+import type { AnnotationScreenshotStore } from './screenshot-store';
 import type {
   Annotation,
   AnnotationCreatePayload,
@@ -33,6 +34,7 @@ export interface AnnotationStorageArea {
 /** Deterministic dependencies owned by the background composition root. */
 export interface AnnotationStorageDependencies {
   readonly now: () => number;
+  readonly screenshots: AnnotationScreenshotStore;
 }
 
 /** A serialized, background-owned annotation storage service. */
@@ -102,11 +104,11 @@ export function createAnnotationStorage(
               command.note,
             );
           case 'app-notes:annotation/delete':
-            return await removeAnnotation(area, command.url, command.id);
+            return await removeAnnotation(area, dependencies, command.url, command.id);
           case 'app-notes:annotation/clear':
-            return await removePageAnnotations(area, command.url);
+            return await removePageAnnotations(area, dependencies, command.url);
           case 'app-notes:annotation/clear-site':
-            return await removeSiteAnnotations(area, command.url);
+            return await removeSiteAnnotations(area, dependencies, command.url);
           default:
             return casesHandled(command);
         }
@@ -245,10 +247,16 @@ export async function exportSiteAnnotations(url: string): Promise<string> {
   return formatSiteAnnotationsMarkdown(url, annotations);
 }
 
+/** Optional attachment paths used when Markdown is packaged with screenshot files. */
+export interface AnnotationMarkdownOptions {
+  readonly screenshotPath: (annotation: Annotation) => string | null;
+}
+
 /** Format already-parsed website annotations as deterministic, page-grouped Markdown. */
 export function formatSiteAnnotationsMarkdown(
   url: string,
   annotations: ReadonlyArray<Annotation>,
+  options?: AnnotationMarkdownOptions,
 ): string {
   const site = getSiteLabel(url);
   if (annotations.length === 0) return `# No annotations for ${site}\n`;
@@ -265,7 +273,7 @@ export function formatSiteAnnotationsMarkdown(
     if (pageTitle && pageLabel !== 'Home') markdown += `Path: \`${pageLabel}\`\n\n`;
     markdown += `${group.pageId}\n\n`;
     for (const annotation of group.annotations) {
-      markdown += formatAnnotationMarkdown(annotation, '###');
+      markdown += formatAnnotationMarkdown(annotation, '###', options);
     }
   }
 
@@ -347,9 +355,27 @@ async function createAnnotation(
     note: payload.note,
     color: payload.color,
     pageTitle: payload.pageTitle,
+    ...(payload.screenshot !== undefined ? {
+      screenshot: {
+        id: payload.screenshot.id,
+        mimeType: payload.screenshot.mimeType,
+        width: payload.screenshot.width,
+        height: payload.screenshot.height,
+      },
+    } : {}),
   };
 
-  await area.set({ [key]: [...existing, annotation] });
+  if (payload.screenshot !== undefined) {
+    await dependencies.screenshots.save(payload.screenshot);
+  }
+  try {
+    await area.set({ [key]: [...existing, annotation] });
+  } catch (cause: unknown) {
+    if (payload.screenshot !== undefined) {
+      await removeScreenshotsBestEffort(dependencies.screenshots, [payload.screenshot.id]);
+    }
+    throw cause;
+  }
   return { _tag: 'created', annotation };
 }
 
@@ -378,6 +404,7 @@ async function updateAnnotationNote(
 
 async function removeAnnotation(
   area: AnnotationStorageArea,
+  dependencies: AnnotationStorageDependencies,
   url: string,
   id: string,
 ): Promise<AnnotationMutationResult> {
@@ -385,26 +412,34 @@ async function removeAnnotation(
   if (key === null) return mutationFailure('invalid-command', 'Annotation URL is unsupported.');
 
   const annotations = await readAnnotations(area, url);
+  const removed = annotations.find((annotation) => annotation.id === id);
   const next = annotations.filter((annotation) => annotation.id !== id);
   if (next.length === annotations.length) return { _tag: 'deleted', deleted: false };
 
   await area.set({ [key]: next });
+  if (removed?.screenshot !== undefined) {
+    await removeScreenshotsBestEffort(dependencies.screenshots, [removed.screenshot.id]);
+  }
   return { _tag: 'deleted', deleted: true };
 }
 
 async function removePageAnnotations(
   area: AnnotationStorageArea,
+  dependencies: AnnotationStorageDependencies,
   url: string,
 ): Promise<AnnotationMutationResult> {
   const key = getAnnotationStorageKeyForUrl(url);
   if (key === null) return mutationFailure('invalid-command', 'Annotation URL is unsupported.');
 
+  const annotations = await readAnnotations(area, url);
   await area.remove(key);
+  await removeScreenshotsBestEffort(dependencies.screenshots, getScreenshotIds(annotations));
   return { _tag: 'cleared' };
 }
 
 async function removeSiteAnnotations(
   area: AnnotationStorageArea,
+  dependencies: AnnotationStorageDependencies,
   url: string,
 ): Promise<AnnotationMutationResult> {
   const siteId = parseSiteId(url);
@@ -412,8 +447,26 @@ async function removeSiteAnnotations(
 
   const result = await area.get(null);
   const keys = Object.keys(result).filter((key) => getStorageKeySiteId(key) === siteId);
+  const annotations = keys.flatMap((key) => readStorageEntryAnnotations(key, result[key]));
   if (keys.length > 0) await area.remove(keys);
+  await removeScreenshotsBestEffort(dependencies.screenshots, getScreenshotIds(annotations));
   return { _tag: 'site-cleared', clearedPages: keys.length };
+}
+
+function getScreenshotIds(annotations: ReadonlyArray<Annotation>): string[] {
+  return annotations.flatMap((annotation) =>
+    annotation.screenshot === undefined ? [] : [annotation.screenshot.id]);
+}
+
+async function removeScreenshotsBestEffort(
+  store: AnnotationScreenshotStore,
+  ids: ReadonlyArray<string>,
+): Promise<void> {
+  try {
+    await store.remove(ids);
+  } catch {
+    // Annotation state is authoritative; an unreachable orphan blob is safer than a false failure.
+  }
 }
 
 function getStorageKeySiteId(key: string): string | null {
@@ -465,7 +518,11 @@ function getLatestPageTitle(annotations: ReadonlyArray<Annotation>): string | nu
   return latest?.pageTitle ?? null;
 }
 
-function formatAnnotationMarkdown(annotation: Annotation, headingLevel: '##' | '###'): string {
+function formatAnnotationMarkdown(
+  annotation: Annotation,
+  headingLevel: '##' | '###',
+  options?: AnnotationMarkdownOptions,
+): string {
   const selectedText = annotation.anchor.text;
   const heading = truncateHeading(selectedText ?? annotation.anchor.label, 96);
   const time = new Date(annotation.createdAt).toLocaleString();
@@ -478,9 +535,19 @@ function formatAnnotationMarkdown(annotation: Annotation, headingLevel: '##' | '
   if (annotation.anchor.nearbyText && annotation.anchor.nearbyText !== selectedText) {
     markdown += `Context: ${annotation.anchor.nearbyText}\n\n`;
   }
+  if (annotation.screenshot !== undefined) {
+    const path = options?.screenshotPath(annotation) ?? null;
+    markdown += path === null
+      ? `Screenshot attachment: ${annotation.screenshot.width} × ${annotation.screenshot.height} PNG (not included in this Markdown)\n\n`
+      : `![Screenshot of ${escapeMarkdownAlt(heading)}](<${path}>)\n\n`;
+  }
   markdown += `**Note**\n\n${annotation.note}\n\n`;
   markdown += `_Created ${time}_\n\n`;
   return markdown;
+}
+
+function escapeMarkdownAlt(text: string): string {
+  return text.replace(/[[\]\\]/g, '\\$&');
 }
 
 function truncateHeading(text: string, maximumLength: number): string {

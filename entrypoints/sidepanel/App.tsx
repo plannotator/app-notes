@@ -6,6 +6,7 @@ import {
   Copy,
   Download,
   Files,
+  ImageIcon,
   Library,
   MessageSquare,
   MousePointer2,
@@ -27,6 +28,8 @@ import {
   groupAnnotationsByPage,
   updateAnnotation,
 } from '@/lib/storage';
+import { browserScreenshotStore } from '@/lib/screenshot-store';
+import { createSiteExportArchive } from '@/lib/site-export';
 import type { Annotation } from '@/lib/types';
 import type { AnnotationStoragePrefix } from '@/lib/page';
 
@@ -292,7 +295,12 @@ export function SidePanelApp() {
       const markdown = await exportSiteAnnotations(currentSite.href);
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
-      setStatus('All site notes copied.');
+      const screenshotCount = currentSite.annotations.filter(
+        (annotation) => annotation.screenshot !== undefined,
+      ).length;
+      setStatus(screenshotCount === 0
+        ? 'All site notes copied.'
+        : 'Text copied. Export includes screenshots.');
       if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
       copiedTimerRef.current = window.setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -305,13 +313,27 @@ export function SidePanelApp() {
     if (!currentSite) return;
 
     try {
+      const hasScreenshots = currentSite.annotations.some(
+        (annotation) => annotation.screenshot !== undefined,
+      );
+      if (hasScreenshots) {
+        const archive = await createSiteExportArchive(
+          currentSite.href,
+          currentSite.annotations,
+          browserScreenshotStore,
+        );
+        downloadBlob(archive.blob, getExportFilename(currentSite.href, 'zip'));
+        setStatus(archive.missingScreenshots === 0
+          ? `${archive.includedScreenshots} ${archive.includedScreenshots === 1 ? 'screenshot' : 'screenshots'} exported with notes.`
+          : 'Exported notes; one or more screenshots were unavailable.');
+        return;
+      }
+
       const markdown = await exportSiteAnnotations(currentSite.href);
-      const blobUrl = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown' }));
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = getExportFilename(currentSite.href);
-      anchor.click();
-      URL.revokeObjectURL(blobUrl);
+      downloadBlob(
+        new Blob([markdown], { type: 'text/markdown' }),
+        getExportFilename(currentSite.href, 'md'),
+      );
       setStatus('Markdown exported.');
     } catch {
       setStatus('Couldn’t export notes.');
@@ -431,7 +453,7 @@ export function SidePanelApp() {
             </h2>
             <p className="mt-1 max-w-[240px] text-xs leading-5 text-text-secondary">
               {pageUnavailable
-                ? 'App Notes works on regular web pages opened with http or https.'
+                ? 'App Notes works on web pages and local files with browser access enabled.'
                 : 'Annotate any page on this site and every note will collect here.'}
             </p>
           </div>
@@ -576,6 +598,9 @@ function AllNotesPage({ annotations, onOpenAnnotation }: AllNotesPageProps) {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-[10px] leading-4 text-text-tertiary">
+                    {annotation.screenshot !== undefined && (
+                      <ImageIcon aria-hidden="true" className="shrink-0" size={11} />
+                    )}
                     <span className="min-w-0 flex-1 truncate">
                       {getAnnotationPageLabel(annotation)}
                     </span>
@@ -622,8 +647,12 @@ function AnnotationCard({
     <article className="group px-4 py-3.5 transition-colors hover:bg-surface-hover">
       <div className="flex min-h-8 items-start justify-between gap-2">
         <div className="flex items-center gap-1.5 pt-1 text-[10px] font-medium uppercase tracking-[0.06em] text-text-tertiary">
-          <MessageSquare aria-hidden="true" size={11} strokeWidth={2.2} />
-          <span>Note</span>
+          {annotation.screenshot === undefined ? (
+            <MessageSquare aria-hidden="true" size={11} strokeWidth={2.2} />
+          ) : (
+            <ImageIcon aria-hidden="true" size={11} strokeWidth={2.2} />
+          )}
+          <span>{annotation.screenshot === undefined ? 'Note' : 'Screenshot note'}</span>
         </div>
         <div className="app-notes-card-actions flex items-center gap-0.5 transition-opacity">
           <button
@@ -654,6 +683,10 @@ function AnnotationCard({
       <p className="truncate font-mono text-[10px] leading-4 text-text-tertiary" title={annotation.anchor.selector}>
         {annotation.anchor.selector}
       </p>
+
+      {annotation.screenshot !== undefined && (
+        <AnnotationScreenshotPreview annotation={annotation} />
+      )}
 
       {isEditing ? (
         <div className="mt-2.5">
@@ -700,6 +733,65 @@ function AnnotationCard({
 
       <p className="mt-2 text-[10px] leading-4 text-text-tertiary">{timeAgo}</p>
     </article>
+  );
+}
+
+function AnnotationScreenshotPreview({ annotation }: { readonly annotation: Annotation }) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+  const screenshot = annotation.screenshot;
+
+  useEffect(() => {
+    if (screenshot === undefined) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setImageUrl(null);
+    setUnavailable(false);
+
+    browserScreenshotStore.get(screenshot.id)
+      .then((blob) => {
+        if (cancelled) return;
+        if (blob === null) {
+          setUnavailable(true);
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setImageUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setUnavailable(true);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
+    };
+  }, [screenshot]);
+
+  if (screenshot === undefined) return null;
+  if (unavailable) {
+    return (
+      <p className="mt-2.5 rounded-lg bg-surface-2 px-3 py-2 text-[11px] text-text-tertiary">
+        Screenshot unavailable
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2.5 overflow-hidden rounded-lg bg-surface-2 shadow-[inset_0_0_0_1px_var(--color-border-subtle)]">
+      {imageUrl === null ? (
+        <div className="h-36 animate-pulse" aria-label="Loading screenshot" />
+      ) : (
+        <img
+          src={imageUrl}
+          alt={`Screenshot of ${annotation.anchor.text ?? annotation.anchor.label}`}
+          width={screenshot.width}
+          height={screenshot.height}
+          loading="lazy"
+          className="block h-36 w-full object-contain"
+        />
+      )}
+    </div>
   );
 }
 
@@ -823,7 +915,18 @@ function getAnnotationSummary(annotation: Annotation): string {
   return `${selectedText} — ${annotation.note}`;
 }
 
-function getExportFilename(url: string): string {
+function getExportFilename(url: string, extension: 'md' | 'zip'): string {
   const site = (getSiteDisplayLabel(url) ?? 'site').replace(/[^a-z0-9.-]+/gi, '-');
-  return `app-notes-${site}-${new Date().toISOString().slice(0, 10)}.md`;
+  return `app-notes-${site}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const blobUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  queueMicrotask(() => URL.revokeObjectURL(blobUrl));
 }

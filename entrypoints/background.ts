@@ -2,10 +2,16 @@ import { createAnnotationStorage, getAnnotations } from '@/lib/storage';
 import { getAnnotationStorageKeyForUrl } from '@/lib/page';
 import { parseAnnotationMutationCommand } from '@/lib/types';
 import { openNotesWorkspace } from '@/lib/open-notes-workspace';
+import {
+  parseCaptureVisibleTabRequest,
+} from '@/lib/element-capture';
+import { browserScreenshotStore } from '@/lib/screenshot-store';
+import type { CaptureVisibleTabResult } from '@/lib/element-capture';
 
 export default defineBackground(() => {
   const annotationStorage = createAnnotationStorage(browser.storage.local, {
     now: () => Date.now(),
+    screenshots: browserScreenshotStore,
   });
   const badgeGenerations = new Map<number, number>();
 
@@ -59,7 +65,12 @@ export default defineBackground(() => {
     }).catch(() => undefined);
   };
 
-  browser.runtime.onMessage.addListener((message: unknown) => {
+  browser.runtime.onMessage.addListener((message: unknown, sender) => {
+    const captureRequest = parseCaptureVisibleTabRequest(message);
+    if (captureRequest !== null) {
+      return captureVisibleTab(sender.tab);
+    }
+
     const command = parseAnnotationMutationCommand(message);
     return command === null ? undefined : annotationStorage.execute(command);
   });
@@ -121,3 +132,20 @@ export default defineBackground(() => {
   updateAllTabBadges().catch(() => undefined);
   browser.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: false }).catch(() => undefined);
 });
+
+async function captureVisibleTab(
+  tab: { readonly active?: boolean; readonly windowId?: number } | undefined,
+): Promise<CaptureVisibleTabResult> {
+  if (tab?.active !== true || tab.windowId === undefined) {
+    return { _tag: 'capture-failed', message: 'Keep this page active and try again.' };
+  }
+
+  try {
+    const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    return dataUrl.startsWith('data:image/png;base64,')
+      ? { _tag: 'captured-tab', dataUrl }
+      : { _tag: 'capture-failed', message: 'The browser returned an invalid screenshot.' };
+  } catch {
+    return { _tag: 'capture-failed', message: 'The browser couldn’t capture this page.' };
+  }
+}

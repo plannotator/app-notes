@@ -28,6 +28,19 @@ export interface AnnotationAnchor {
   readonly nearbyText?: string;
 }
 
+/** Metadata for one lossless element screenshot attached to an annotation. */
+export interface AnnotationScreenshot {
+  readonly id: string;
+  readonly mimeType: 'image/png';
+  readonly width: number;
+  readonly height: number;
+}
+
+/** A screenshot crossing the runtime boundary before its PNG is stored as a blob. */
+export interface AnnotationScreenshotCapture extends AnnotationScreenshot {
+  readonly dataUrl: string;
+}
+
 /** One persisted page annotation. */
 export interface Annotation {
   readonly id: string;
@@ -40,6 +53,8 @@ export interface Annotation {
   readonly color: string;
   /** The document title captured when the annotation was created. */
   readonly pageTitle?: string;
+  /** Optional screenshot metadata; PNG bytes live in extension-owned blob storage. */
+  readonly screenshot?: AnnotationScreenshot;
 }
 
 /** The exact caller-owned fields required to create an annotation. */
@@ -51,6 +66,7 @@ export interface AnnotationCreatePayload {
   readonly note: string;
   readonly color: string;
   readonly pageTitle: string;
+  readonly screenshot?: AnnotationScreenshotCapture;
 }
 
 /** The only mutable annotation field currently exposed by the product. */
@@ -190,6 +206,13 @@ export function parseAnnotation(input: unknown): Annotation | null {
     pageTitle = input.pageTitle;
   }
 
+  let screenshot: AnnotationScreenshot | undefined;
+  if (Object.hasOwn(input, 'screenshot')) {
+    const parsedScreenshot = parseAnnotationScreenshot(input.screenshot);
+    if (parsedScreenshot === null || parsedScreenshot.id !== input.id) return null;
+    screenshot = parsedScreenshot;
+  }
+
   return {
     id: input.id,
     url: input.url,
@@ -200,6 +223,7 @@ export function parseAnnotation(input: unknown): Annotation | null {
     note: input.note,
     color: input.color,
     ...(pageTitle !== undefined ? { pageTitle } : {}),
+    ...(screenshot !== undefined ? { screenshot } : {}),
   };
 }
 
@@ -217,7 +241,11 @@ export function parseAnnotations(input: unknown): Annotation[] {
 
 /** Parse unknown input into the exact create payload accepted by the domain. */
 export function parseAnnotationCreatePayload(input: unknown): AnnotationCreatePayload | null {
-  if (!isRecord(input) || !hasExactKeys(input, CREATE_PAYLOAD_KEYS)) return null;
+  if (!isRecord(input) || !hasAllowedAndRequiredKeys(
+    input,
+    CREATE_PAYLOAD_ALLOWED_KEYS,
+    CREATE_PAYLOAD_REQUIRED_KEYS,
+  )) return null;
   if (!isNonEmptyString(input.id) || !isSupportedUrl(input.url) || !isAnnotationType(input.type)) {
     return null;
   }
@@ -227,6 +255,13 @@ export function parseAnnotationCreatePayload(input: unknown): AnnotationCreatePa
   const anchor = parseAnnotationAnchor(input.anchor);
   if (anchor === null) return null;
 
+  let screenshot: AnnotationScreenshotCapture | undefined;
+  if (Object.hasOwn(input, 'screenshot')) {
+    const parsedScreenshot = parseAnnotationScreenshotCapture(input.screenshot);
+    if (parsedScreenshot === null || parsedScreenshot.id !== input.id) return null;
+    screenshot = parsedScreenshot;
+  }
+
   return {
     id: input.id,
     url: input.url,
@@ -235,6 +270,7 @@ export function parseAnnotationCreatePayload(input: unknown): AnnotationCreatePa
     note: input.note,
     color: input.color,
     pageTitle: input.pageTitle,
+    ...(screenshot !== undefined ? { screenshot } : {}),
   };
 }
 
@@ -308,6 +344,7 @@ export function parseAnnotationMutationResult(input: unknown): AnnotationMutatio
 const PAGE_TITLE_MAX_LENGTH = 160;
 const ELEMENT_TEXT_MAX_LENGTH = 180;
 const NEARBY_TEXT_MAX_LENGTH = 280;
+const SCREENSHOT_DATA_URL_MAX_LENGTH = 32 * 1024 * 1024;
 const ANNOTATION_REQUIRED_KEYS = [
   'id',
   'url',
@@ -318,7 +355,11 @@ const ANNOTATION_REQUIRED_KEYS = [
   'note',
   'color',
 ] as const;
-const ANNOTATION_ALLOWED_KEYS = [...ANNOTATION_REQUIRED_KEYS, 'pageTitle'] as const;
+const ANNOTATION_ALLOWED_KEYS = [
+  ...ANNOTATION_REQUIRED_KEYS,
+  'pageTitle',
+  'screenshot',
+] as const;
 const ANCHOR_REQUIRED_KEYS = ['selector', 'tagName', 'label'] as const;
 const ANCHOR_ALLOWED_KEYS = [
   ...ANCHOR_REQUIRED_KEYS,
@@ -329,7 +370,7 @@ const ANCHOR_ALLOWED_KEYS = [
 ] as const;
 const ANCHOR_ATTRIBUTE_KEYS = ['name', 'value'] as const;
 const RECT_KEYS = ['x', 'y', 'width', 'height'] as const;
-const CREATE_PAYLOAD_KEYS = [
+const CREATE_PAYLOAD_REQUIRED_KEYS = [
   'id',
   'url',
   'type',
@@ -338,6 +379,9 @@ const CREATE_PAYLOAD_KEYS = [
   'color',
   'pageTitle',
 ] as const;
+const CREATE_PAYLOAD_ALLOWED_KEYS = [...CREATE_PAYLOAD_REQUIRED_KEYS, 'screenshot'] as const;
+const SCREENSHOT_KEYS = ['id', 'mimeType', 'width', 'height'] as const;
+const SCREENSHOT_CAPTURE_KEYS = [...SCREENSHOT_KEYS, 'dataUrl'] as const;
 const CREATE_COMMAND_KEYS = ['type', 'payload'] as const;
 const UPDATE_COMMAND_KEYS = ['type', 'url', 'id', 'note'] as const;
 const DELETE_COMMAND_KEYS = ['type', 'url', 'id'] as const;
@@ -348,6 +392,33 @@ const DELETED_RESULT_KEYS = ['_tag', 'deleted'] as const;
 const CLEARED_RESULT_KEYS = ['_tag'] as const;
 const SITE_CLEARED_RESULT_KEYS = ['_tag', 'clearedPages'] as const;
 const FAILED_RESULT_KEYS = ['_tag', 'code', 'message'] as const;
+
+function parseAnnotationScreenshot(input: unknown): AnnotationScreenshot | null {
+  if (!isRecord(input) || !hasExactKeys(input, SCREENSHOT_KEYS)) return null;
+  if (!isNonEmptyString(input.id) || input.mimeType !== 'image/png') return null;
+  if (!isSafePositiveInteger(input.width) || !isSafePositiveInteger(input.height)) return null;
+
+  return {
+    id: input.id,
+    mimeType: input.mimeType,
+    width: input.width,
+    height: input.height,
+  };
+}
+
+function parseAnnotationScreenshotCapture(
+  input: unknown,
+): AnnotationScreenshotCapture | null {
+  if (!isRecord(input) || !hasExactKeys(input, SCREENSHOT_CAPTURE_KEYS)) return null;
+  const screenshot = parseAnnotationScreenshot({
+    id: input.id,
+    mimeType: input.mimeType,
+    width: input.width,
+    height: input.height,
+  });
+  if (screenshot === null || !isPngDataUrl(input.dataUrl)) return null;
+  return { ...screenshot, dataUrl: input.dataUrl };
+}
 
 function parseAnnotationAnchor(input: unknown): AnnotationAnchor | null {
   if (!isRecord(input) || !hasAllowedAndRequiredKeys(input, ANCHOR_ALLOWED_KEYS, ANCHOR_REQUIRED_KEYS)) {
@@ -455,6 +526,15 @@ function isFiniteNumber(input: unknown): input is number {
 
 function isFiniteNonNegativeNumber(input: unknown): input is number {
   return isFiniteNumber(input) && input >= 0;
+}
+
+function isSafePositiveInteger(input: unknown): input is number {
+  return typeof input === 'number' && Number.isSafeInteger(input) && input > 0;
+}
+
+function isPngDataUrl(input: unknown): input is string {
+  if (typeof input !== 'string' || input.length > SCREENSHOT_DATA_URL_MAX_LENGTH) return false;
+  return /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(input);
 }
 
 function isAnnotationType(input: unknown): input is AnnotationType {

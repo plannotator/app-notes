@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { MessageSquare, Send, X } from 'lucide-react';
+import { Camera, MessageSquare, RotateCcw, Send, X } from 'lucide-react';
+import type { ElementScreenshotDraft } from '@/lib/element-capture';
 
 export type DraftExitSource = 'keyboard' | 'pointer';
 
@@ -8,7 +9,12 @@ interface AnnotationPopoverProps {
   anchorXRatio: number;
   label: string;
   note: string;
+  screenshot: ElementScreenshotDraft | null;
+  isCapturing: boolean;
+  captureError: string;
   onNoteChange: (note: string) => void;
+  onCapture: () => void | Promise<void>;
+  onRemoveScreenshot: () => void;
   onSave: (note: string) => Promise<boolean>;
   onRequestExit: (source: DraftExitSource) => void;
 }
@@ -61,7 +67,12 @@ export function AnnotationPopover({
   anchorXRatio,
   label,
   note,
+  screenshot,
+  isCapturing,
+  captureError,
   onNoteChange,
+  onCapture,
+  onRemoveScreenshot,
   onSave,
   onRequestExit,
 }: AnnotationPopoverProps) {
@@ -75,7 +86,7 @@ export function AnnotationPopover({
   const editorId = useId();
   const isMac = navigator.platform.toLowerCase().includes('mac');
   const placement = placePopover(rect, anchorXRatio, popoverHeight);
-  const canSave = note.trim().length > 0 && !isSaving;
+  const canSave = note.trim().length > 0 && !isSaving && !isCapturing;
 
   useEffect(() => {
     if (window.matchMedia('(pointer: coarse)').matches) return;
@@ -174,6 +185,51 @@ export function AnnotationPopover({
         </button>
       </header>
 
+      {screenshot === null ? (
+        <button
+          type="button"
+          className="app-notes-capture-button"
+          disabled={isSaving || isCapturing}
+          onClick={onCapture}
+        >
+          <Camera aria-hidden="true" size={14} strokeWidth={2.1} />
+          <span>{isCapturing ? 'Capturing…' : 'Capture element'}</span>
+          <span className="app-notes-capture-hint">PNG</span>
+        </button>
+      ) : (
+        <figure className="app-notes-screenshot-preview">
+          <img
+            src={screenshot.dataUrl}
+            alt={`Screenshot of ${label}`}
+            width={screenshot.width}
+            height={screenshot.height}
+          />
+          <figcaption>
+            <span>{screenshot.width} × {screenshot.height} PNG</span>
+            <span className="app-notes-screenshot-actions">
+              <button
+                type="button"
+                className="app-notes-screenshot-action"
+                disabled={isSaving || isCapturing}
+                onClick={onCapture}
+              >
+                <RotateCcw aria-hidden="true" size={11} />
+                <span>{isCapturing ? 'Capturing…' : 'Retake'}</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Remove screenshot"
+                className="app-notes-screenshot-remove"
+                disabled={isSaving || isCapturing}
+                onClick={onRemoveScreenshot}
+              >
+                <X aria-hidden="true" size={12} />
+              </button>
+            </span>
+          </figcaption>
+        </figure>
+      )}
+
       <label className="app-notes-editor-label" htmlFor={editorId}>Note</label>
       <textarea
         ref={textareaRef}
@@ -192,7 +248,7 @@ export function AnnotationPopover({
       />
 
       <p className="app-notes-popover-error" role="status" aria-live="polite">
-        {saveError}
+        {saveError || captureError}
       </p>
 
       <footer className="app-notes-popover-footer">

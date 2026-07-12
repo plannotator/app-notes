@@ -21,11 +21,13 @@ export default defineConfig({
     homepage_url: 'https://github.com/plannotator/app-notes',
     permissions: [
       'storage',
+      'unlimitedStorage',
       'activeTab',
       'tabs',
       'webNavigation',
       ...(browser === 'chrome' ? ['sidePanel'] : []),
     ],
+    host_permissions: ['<all_urls>'],
     ...(browser === 'firefox'
       ? {
           browser_specific_settings: {

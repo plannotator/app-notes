@@ -17,6 +17,8 @@ import { getAnnotations, saveAnnotation } from '@/lib/storage';
 import { parseAnnotations } from '@/lib/types';
 import type { Annotation, AnnotationAnchor } from '@/lib/types';
 import type { AnnotationStorageKey } from '@/lib/page';
+import { captureVisibleElement } from '@/lib/element-capture';
+import type { ElementScreenshotDraft } from '@/lib/element-capture';
 
 interface SelectedElement {
   readonly annotationId: string;
@@ -52,6 +54,7 @@ interface CommittedSelectionGesture {
 interface ParkedDraft {
   readonly note: string;
   readonly selection: SelectedElement;
+  readonly screenshot: ElementScreenshotDraft | null;
 }
 
 interface ContentAppProps {
@@ -101,12 +104,17 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
   const [hoveredLabel, setHoveredLabel] = useState('');
   const [selected, setSelected] = useState<SelectedElement | null>(null);
   const [draft, setDraft] = useState('');
+  const [screenshot, setScreenshot] = useState<ElementScreenshotDraft | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [captureError, setCaptureError] = useState('');
   const [annotations, setAnnotations] = useState<ReadonlyArray<Annotation>>([]);
   const [exitWarning, setExitWarning] = useState<ExitWarningState | null>(null);
 
   const activeRef = useRef(false);
   const selectedRef = useRef<SelectedElement | null>(null);
   const draftRef = useRef('');
+  const screenshotRef = useRef<ElementScreenshotDraft | null>(null);
+  const isCapturingRef = useRef(false);
   const hoveredElementRef = useRef<Element | null>(null);
   const lastPointerRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
   const committedSelectionGestureRef = useRef<CommittedSelectionGesture | null>(null);
@@ -143,12 +151,22 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
     setDraft(note);
   }, []);
 
+  const updateScreenshot = useCallback((next: ElementScreenshotDraft | null) => {
+    screenshotRef.current = next;
+    setScreenshot(next);
+  }, []);
+
   const closeEditor = useCallback((restoreFocus = true) => {
     const focusTarget = selectedRef.current?.returnFocus ?? null;
     selectedRef.current = null;
     setSelected(null);
     draftRef.current = '';
     setDraft('');
+    screenshotRef.current = null;
+    setScreenshot(null);
+    isCapturingRef.current = false;
+    setIsCapturing(false);
+    setCaptureError('');
     clearExitWarning();
     clearHover();
 
@@ -168,7 +186,10 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
     y: number,
     discardAction: ExitWarningState['discardAction'],
   ): boolean => {
-    if (draftRef.current.trim().length === 0 || exitArmedRef.current) {
+    if (
+      (draftRef.current.trim().length === 0 && screenshotRef.current === null)
+      || exitArmedRef.current
+    ) {
       closeEditor();
       return true;
     }
@@ -231,10 +252,15 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
     const currentSelection = selectedRef.current;
     if (currentSelection) {
       const currentDraft = draftRef.current;
-      if (currentSelection.storageKey && currentDraft.trim().length > 0) {
+      const currentScreenshot = screenshotRef.current;
+      if (
+        currentSelection.storageKey
+        && (currentDraft.trim().length > 0 || currentScreenshot !== null)
+      ) {
         parkedDraftsRef.current.set(currentSelection.storageKey, {
           selection: currentSelection,
           note: currentDraft,
+          screenshot: currentScreenshot,
         });
       }
       closeEditor(false);
@@ -266,9 +292,11 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
     selectedRef.current = nextSelection;
     setSelected(nextSelection);
     updateDraft('');
+    updateScreenshot(null);
+    setCaptureError('');
     clearExitWarning();
     clearHover();
-  }, [clearExitWarning, clearHover, updateDraft]);
+  }, [clearExitWarning, clearHover, updateDraft, updateScreenshot]);
 
   useEffect(() => {
     loadAnnotationsForPage(pageRef.current).catch(() => undefined);
@@ -465,6 +493,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
           selectedRef.current = restoredSelection;
           setSelected(restoredSelection);
           updateDraft(parkedDraft.note);
+          updateScreenshot(parkedDraft.screenshot);
           clearHover();
           return;
         }
@@ -509,7 +538,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
         layoutFrameRef.current = null;
       }
     };
-  }, [active, clearHover, updateDraft]);
+  }, [active, clearHover, updateDraft, updateScreenshot]);
 
   useEffect(() => {
     const handleMessage = (message: unknown) => {
@@ -554,6 +583,34 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
     if (exitCountdownRef.current !== null) window.clearInterval(exitCountdownRef.current);
   }, []);
 
+  const handleCapture = useCallback(async (): Promise<void> => {
+    const currentSelection = selectedRef.current;
+    const overlayHost = getShadowHost();
+    if (!currentSelection || overlayHost === null || isCapturingRef.current) return;
+
+    isCapturingRef.current = true;
+    setIsCapturing(true);
+    setCaptureError('');
+    try {
+      const result = await captureVisibleElement(currentSelection.rect, overlayHost);
+      if (selectedRef.current?.annotationId !== currentSelection.annotationId) return;
+      if (result._tag === 'capture-failed') {
+        setCaptureError(result.message);
+        return;
+      }
+      updateScreenshot(result.screenshot);
+    } catch {
+      if (selectedRef.current?.annotationId === currentSelection.annotationId) {
+        setCaptureError('Couldn’t capture this element. Try again.');
+      }
+    } finally {
+      if (selectedRef.current?.annotationId === currentSelection.annotationId) {
+        isCapturingRef.current = false;
+        setIsCapturing(false);
+      }
+    }
+  }, [getShadowHost, updateScreenshot]);
+
   const handleSave = useCallback(async (note: string): Promise<boolean> => {
     const currentSelection = selectedRef.current;
     if (!currentSelection || currentSelection.storageKey === null) return false;
@@ -566,6 +623,12 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
       note,
       color: 'blue',
       pageTitle: currentSelection.pageTitle,
+      ...(screenshotRef.current !== null ? {
+        screenshot: {
+          id: currentSelection.annotationId,
+          ...screenshotRef.current,
+        },
+      } : {}),
     });
     if (result._tag !== 'created') return false;
 
@@ -596,7 +659,15 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
             anchorXRatio={selected.anchorXRatio}
             label={selected.label}
             note={draft}
+            screenshot={screenshot}
+            isCapturing={isCapturing}
+            captureError={captureError}
             onNoteChange={updateDraft}
+            onCapture={handleCapture}
+            onRemoveScreenshot={() => {
+              updateScreenshot(null);
+              setCaptureError('');
+            }}
             onSave={handleSave}
             onRequestExit={requestExitDraftNearSelection}
           />
