@@ -3,6 +3,10 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  zip: {
+    name: 'app-notes',
+    excludeSources: ['HANDOFF.md'],
+  },
   webExt: {
     startUrls: ['https://yahoo.com'],
   },
@@ -15,7 +19,13 @@ export default defineConfig({
     description: 'Annotate elements on any website and export every note in one place.',
     author: 'Michael Ramos (@backnotprop)',
     homepage_url: 'https://github.com/plannotator/app-notes',
-    permissions: ['storage', 'activeTab', 'tabs', 'sidePanel', 'webNavigation'],
+    permissions: [
+      'storage',
+      'activeTab',
+      'tabs',
+      'webNavigation',
+      ...(browser === 'chrome' ? ['sidePanel'] : []),
+    ],
     ...(browser === 'firefox'
       ? {
           browser_specific_settings: {

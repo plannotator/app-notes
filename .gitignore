@@ -14,6 +14,8 @@ stats-*.json
 .wxt
 web-ext.config.ts
 HANDOFF.md
+.env.submit
+.env.publish
 
 # Editor directories and files
 .vscode/*

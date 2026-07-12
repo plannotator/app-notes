@@ -6,6 +6,9 @@ The source code for App Notes, a local-first browser extension for attaching not
 
 - [Chrome Web Store](https://chromewebstore.google.com/) — coming soon
 - [Firefox Add-ons](https://addons.mozilla.org/firefox/) — coming soon
+- [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/) — coming soon
+
+Arc can install the Chrome release. Safari is planned after compatibility QA and App Store packaging.
 
 ## Development
 
@@ -17,6 +20,8 @@ bun run dev
 ```
 
 Run `bun test` and `bun run build` before submitting changes.
+
+See the [release checklist](docs/RELEASE_CHECKLIST.md) and [privacy policy](PRIVACY.md).
 
 ## License
 

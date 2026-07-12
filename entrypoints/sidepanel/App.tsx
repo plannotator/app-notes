@@ -36,21 +36,41 @@ interface PanelSite {
 
 type PanelView = 'site' | 'all';
 
+interface WorkspaceLaunch {
+  readonly sourceTabId: number | null;
+  readonly view: PanelView;
+}
+
+function getWorkspaceLaunch(): WorkspaceLaunch {
+  const search = new URLSearchParams(window.location.search);
+  const rawTabId = search.get('tabId');
+  const sourceTabId = rawTabId === null ? null : Number(rawTabId);
+  const hasSourceTab = sourceTabId !== null
+    && Number.isInteger(sourceTabId)
+    && sourceTabId >= 0;
+
+  return {
+    sourceTabId: hasSourceTab ? sourceTabId : null,
+    view: search.get('view') === 'all' ? 'all' : 'site',
+  };
+}
+
 function sortNewestFirst(annotations: ReadonlyArray<Annotation>): ReadonlyArray<Annotation> {
   return [...annotations].sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
 /** The current-website management surface for every saved note across its pages. */
 export function SidePanelApp() {
+  const [launch] = useState(getWorkspaceLaunch);
   const [site, setSite] = useState<PanelSite | null>(null);
-  const [view, setView] = useState<PanelView>('site');
+  const [view, setView] = useState<PanelView>(launch.view);
   const [allAnnotations, setAllAnnotations] = useState<ReadonlyArray<Annotation> | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState('');
   const siteRef = useRef<PanelSite | null>(null);
-  const viewRef = useRef<PanelView>('site');
+  const viewRef = useRef<PanelView>(launch.view);
   const loadGenerationRef = useRef(0);
   const allLoadGenerationRef = useRef(0);
   const activeTabRequestRef = useRef(0);
@@ -131,13 +151,16 @@ export function SidePanelApp() {
 
   const loadActiveTab = useCallback(async () => {
     const request = ++activeTabRequestRef.current;
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    const tab = launch.sourceTabId === null
+      ? (await browser.tabs.query({ active: true, currentWindow: true }))[0]
+      : await browser.tabs.get(launch.sourceTabId);
     if (request !== activeTabRequestRef.current || tab?.id === undefined || !tab.url) return;
     await loadSite(tab.id, tab.url);
-  }, [loadSite]);
+  }, [launch.sourceTabId, loadSite]);
 
   useEffect(() => {
     const handleActivated = () => {
+      if (launch.sourceTabId !== null) return;
       loadActiveTab().catch(() => setStatus('Couldn’t load the active page.'));
     };
 
@@ -173,8 +196,9 @@ export function SidePanelApp() {
       }
 
       const current = siteRef.current;
-      if (!current?.storagePrefix) return;
-      if (!annotationKeys.some((key) => key.startsWith(current.storagePrefix!))) return;
+      const currentStoragePrefix = current?.storagePrefix;
+      if (!current || !currentStoragePrefix) return;
+      if (!annotationKeys.some((key) => key.startsWith(currentStoragePrefix))) return;
 
       const generation = ++loadGenerationRef.current;
       getSiteAnnotations(current.href)
@@ -194,6 +218,9 @@ export function SidePanelApp() {
     };
 
     loadActiveTab().catch(() => setStatus('Couldn’t load the active page.'));
+    if (viewRef.current === 'all') {
+      refreshAllAnnotations().catch(() => setStatus('Couldn’t load all notes.'));
+    }
     browser.tabs.onActivated.addListener(handleActivated);
     browser.tabs.onUpdated.addListener(handleUpdated);
     browser.webNavigation.onHistoryStateUpdated.addListener(handleHistoryNavigation);
@@ -205,7 +232,7 @@ export function SidePanelApp() {
       browser.webNavigation.onHistoryStateUpdated.removeListener(handleHistoryNavigation);
       browser.storage.onChanged.removeListener(handleStorageChange);
     };
-  }, [commitSite, loadActiveTab, loadSite, refreshAllAnnotations]);
+  }, [commitSite, launch.sourceTabId, loadActiveTab, loadSite, refreshAllAnnotations]);
 
   useEffect(() => () => {
     if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
@@ -314,7 +341,9 @@ export function SidePanelApp() {
 
     try {
       if (currentSite.href !== annotation.url) {
-        await browser.tabs.update(currentSite.tabId, { url: annotation.url });
+        await browser.tabs.update(currentSite.tabId, { active: true, url: annotation.url });
+      } else if (launch.sourceTabId !== null) {
+        await browser.tabs.update(currentSite.tabId, { active: true });
       }
       await loadSite(currentSite.tabId, annotation.url);
       showSiteView();

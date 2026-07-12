@@ -6,6 +6,7 @@ import {
   exportSiteAnnotations,
   getSiteAnnotations,
 } from '@/lib/storage';
+import { openNotesWorkspace } from '@/lib/open-notes-workspace';
 import type { AnnotationStoragePrefix } from '@/lib/page';
 
 interface AnnotationModeResponse {
@@ -118,10 +119,15 @@ function App() {
     }
   };
 
-  const openSidePanel = () => {
-    browser.sidePanel?.open({ windowId: -2 }).catch(() => {
-      setStatus('Couldn’t open the side panel.');
-    });
+  const handleOpenNotes = async () => {
+    try {
+      await openNotesWorkspace({
+        tabId: tabId ?? undefined,
+        windowId: -2,
+      });
+    } catch {
+      setStatus('Couldn’t open notes.');
+    }
   };
 
   const handleCopy = async () => {
@@ -177,9 +183,9 @@ function App() {
         />
         <MenuItem
           icon={<PanelRight size={15} />}
-          label="Open side panel"
+          label="Open notes"
           shortcut={panelShortcut}
-          onClick={openSidePanel}
+          onClick={() => handleOpenNotes()}
         />
         <MenuItem
           icon={status === 'All site notes copied.' ? <Check size={15} /> : <Copy size={15} />}

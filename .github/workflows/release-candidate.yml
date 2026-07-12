@@ -1,0 +1,29 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run release:verify
+      - run: bun run release:package
+      - name: Record checksums
+        run: sha256sum .output/app-notes-*.zip | tee .output/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-notes-release-candidate
+          if-no-files-found: error
+          path: |
+            .output/app-notes-*.zip
+            .output/SHA256SUMS.txt
+            .output/safari-mv2

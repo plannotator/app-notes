@@ -1,6 +1,7 @@
 import { createAnnotationStorage, getAnnotations } from '@/lib/storage';
 import { getAnnotationStorageKeyForUrl } from '@/lib/page';
 import { parseAnnotationMutationCommand } from '@/lib/types';
+import { openNotesWorkspace } from '@/lib/open-notes-workspace';
 
 export default defineBackground(() => {
   const annotationStorage = createAnnotationStorage(browser.storage.local, {
@@ -58,23 +59,6 @@ export default defineBackground(() => {
     }).catch(() => undefined);
   };
 
-  const openSidePanel = (tab?: { readonly id?: number; readonly windowId?: number }) => {
-    const sidePanel = browser.sidePanel;
-    if (!sidePanel) return;
-
-    try {
-      if (tab?.id !== undefined) {
-        sidePanel.open({ tabId: tab.id }).catch(() => undefined);
-        return;
-      }
-      if (tab?.windowId !== undefined) {
-        sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
-      }
-    } catch {
-      // The browser rejected a side-panel request outside a supported user gesture.
-    }
-  };
-
   browser.runtime.onMessage.addListener((message: unknown) => {
     const command = parseAnnotationMutationCommand(message);
     return command === null ? undefined : annotationStorage.execute(command);
@@ -82,7 +66,7 @@ export default defineBackground(() => {
 
   browser.commands.onCommand.addListener((command, tab) => {
     if (command === 'open_side_panel') {
-      openSidePanel(tab);
+      openNotesWorkspace({ tabId: tab?.id, windowId: tab?.windowId }).catch(() => undefined);
       return;
     }
 

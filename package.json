@@ -23,8 +23,12 @@
     "dev:firefox": "wxt -b firefox",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
+    "build:safari": "wxt build -b safari",
+    "package:safari": "bun run build:safari && xcrun safari-web-extension-packager .output/safari-mv2 --project-location .output/safari-project --app-name 'App Notes' --bundle-identifier ai.plannotator.App-Notes --macos-only --copy-resources --no-open --no-prompt --force",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
+    "release:verify": "bun test && bun run compile && bun run build && bun run build:firefox && bun run build:safari",
+    "release:package": "bun run zip && bun run zip:firefox",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare"
   },
