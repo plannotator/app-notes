@@ -27,4 +27,8 @@ See the [release checklist](docs/RELEASE_CHECKLIST.md) and [privacy policy](PRIV
 
 ## License
 
-[AGPL-3.0](LICENSE) © [Michael Ramos](https://github.com/backnotprop). Distributed by [Plannotator](https://github.com/plannotator).
+Source available under the [PolyForm Shield License 1.0.0](LICENSE). You may not use the software to provide a competing product.
+
+© [Michael Ramos](https://github.com/backnotprop). Distributed by [Plannotator](https://github.com/plannotator). Project branding is covered by the [trademark notice](TRADEMARKS.md).
+
+Versions published at or before [`4da99d6`](https://github.com/plannotator/app-notes/commit/4da99d6) remain available under AGPL-3.0-only, the license that accompanied those versions.

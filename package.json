@@ -3,7 +3,7 @@
   "description": "A local-first browser extension for annotating elements on any web page.",
   "private": true,
   "version": "0.1.0",
-  "license": "AGPL-3.0-only",
+  "license": "SEE LICENSE IN LICENSE",
   "author": {
     "name": "Michael Ramos",
     "url": "https://github.com/backnotprop"

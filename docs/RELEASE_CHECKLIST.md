@@ -26,7 +26,7 @@ Official references: [WXT publishing](https://wxt.dev/guide/essentials/publishin
 - [ ] Every intended change is merged to `main`.
 - [ ] Working tree is clean and GitHub `main` matches the tested commit.
 - [ ] `package.json` has the intended version. Every rejected-and-resubmitted binary gets a higher version.
-- [ ] `README.md`, `PRIVACY.md`, `SOURCE_CODE_REVIEW.md`, and this checklist are accurate.
+- [ ] `README.md`, `LICENSE`, `TRADEMARKS.md`, `PRIVACY.md`, `SOURCE_CODE_REVIEW.md`, and this checklist are accurate.
 - [ ] The public privacy-policy URL is `https://github.com/plannotator/app-notes/blob/main/PRIVACY.md`.
 - [ ] Run `bun install --frozen-lockfile` from a clean checkout.
 - [ ] Run `bun run release:verify`.
@@ -130,7 +130,7 @@ Apple reference: [package a Safari web extension](https://developer.apple.com/do
 - [ ] Final one-sentence summary and concise description.
 - [ ] Support URL: `https://github.com/plannotator/app-notes/issues`.
 - [ ] Privacy URL: `https://github.com/plannotator/app-notes/blob/main/PRIVACY.md`.
-- [ ] Category, language, homepage, AGPL-3.0 license, and Michael Ramos attribution are consistent.
+- [ ] Category, language, homepage, PolyForm Shield 1.0.0 license, and Michael Ramos attribution are consistent.
 - [ ] At least one polished 1280×800 screenshot; aim for three: annotation composer, site notes, and all notes.
 - [ ] Chrome small promo tile at 440×280.
 - [ ] Store icon at 128×128 with sufficient transparent padding.
@@ -151,7 +151,7 @@ Chrome asset reference: [supplying images](https://developer.chrome.com/docs/web
 
 - [ ] Upload the Firefox ZIP as a listed add-on.
 - [ ] Upload the matching sources ZIP and enter the exact build instructions from `SOURCE_CODE_REVIEW.md`.
-- [ ] Choose AGPL-3.0, complete listing/support fields, and submit.
+- [ ] Choose a custom license, link the repository `LICENSE`, complete listing/support fields, and submit.
 - [ ] If outside testers need a signed build before the listed release, use AMO's unlisted signing flow; do not distribute an unsigned XPI as the normal install.
 
 ### Edge
