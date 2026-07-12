@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import {
   getAnnotationStoragePrefixForUrl,
+  getPageDisplayLabel,
+  getSiteDisplayLabel,
+  parseSiteId,
 } from '@/lib/page';
 import {
   clearSiteAnnotations,
@@ -356,13 +359,7 @@ export function SidePanelApp() {
   const groups = buildPanelGroups(annotations);
   const globalAnnotations = allAnnotations ?? [];
   const pageUnavailable = site !== null && site.storagePrefix === null;
-  const domain = (() => {
-    try {
-      return site ? new URL(site.href).host : 'Current site';
-    } catch {
-      return 'Current site';
-    }
-  })();
+  const domain = site ? getSiteDisplayLabel(site.href) ?? 'Current site' : 'Current site';
 
   return (
     <main className="flex h-screen flex-col bg-surface">
@@ -758,14 +755,13 @@ function buildGlobalGroups(
 ): ReadonlyArray<GlobalSiteGroup> {
   const groups = new Map<string, { label: string; annotations: Annotation[] }>();
   for (const annotation of annotations) {
-    try {
-      const parsed = new URL(annotation.url);
-      const group = groups.get(parsed.origin) ?? { label: parsed.host, annotations: [] };
-      group.annotations.push(annotation);
-      groups.set(parsed.origin, group);
-    } catch {
-      // Persisted annotations are parsed before reaching this view.
-    }
+    const siteId = parseSiteId(annotation.url);
+    const label = getSiteDisplayLabel(annotation.url);
+    if (siteId === null || label === null) continue;
+
+    const group = groups.get(siteId) ?? { label, annotations: [] };
+    group.annotations.push(annotation);
+    groups.set(siteId, group);
   }
 
   return [...groups.entries()]
@@ -803,12 +799,7 @@ function buildPanelGroups(
 }
 
 function getPageLabel(pageId: string): string {
-  try {
-    const path = new URL(pageId).pathname;
-    return path === '/' ? 'Home' : path;
-  } catch {
-    return pageId;
-  }
+  return getPageDisplayLabel(pageId) ?? pageId;
 }
 
 function getAnnotationPageLabel(annotation: Annotation): string {
@@ -833,11 +824,6 @@ function getAnnotationSummary(annotation: Annotation): string {
 }
 
 function getExportFilename(url: string): string {
-  let site = 'site';
-  try {
-    site = new URL(url).hostname.replace(/[^a-z0-9.-]+/gi, '-');
-  } catch {
-    // Keep the safe fallback filename.
-  }
+  const site = (getSiteDisplayLabel(url) ?? 'site').replace(/[^a-z0-9.-]+/gi, '-');
   return `app-notes-${site}-${new Date().toISOString().slice(0, 10)}.md`;
 }

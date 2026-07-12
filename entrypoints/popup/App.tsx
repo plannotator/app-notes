@@ -19,6 +19,18 @@ function parseAnnotationModeResponse(value: unknown): AnnotationModeResponse | n
   return typeof active === 'boolean' ? { active } : null;
 }
 
+function getUnavailablePageMessage(url: string): string {
+  try {
+    if (new URL(url).protocol === 'file:') {
+      return 'Allow file access in the extension settings, then reload this file.';
+    }
+  } catch {
+    // Fall through to the general unavailable-page message.
+  }
+
+  return 'App Notes isn’t available on this page.';
+}
+
 function App() {
   const [active, setActive] = useState(false);
   const [count, setCount] = useState(0);
@@ -64,7 +76,7 @@ function App() {
           setModeAvailable(true);
         }
       } catch {
-        if (!cancelled) setStatus('App Notes isn’t available on this page.');
+        if (!cancelled) setStatus(getUnavailablePageMessage(tab.url));
       }
     };
 
@@ -113,7 +125,7 @@ function App() {
       }
       setActive(response.active);
     } catch {
-      setStatus('App Notes isn’t available on this page.');
+      setStatus(getUnavailablePageMessage(currentUrl));
     } finally {
       setIsToggling(false);
     }

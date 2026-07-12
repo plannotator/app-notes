@@ -1,7 +1,9 @@
 import {
   getAnnotationStorageKeyForUrl,
-  getAnnotationStoragePrefixForUrl,
+  getPageDisplayLabel,
+  getSiteDisplayLabel,
   parsePageId,
+  parseSiteId,
 } from './page';
 import {
   parseAnnotationMutationResult,
@@ -291,13 +293,13 @@ async function readSiteAnnotations(
   area: AnnotationStorageArea,
   url: string,
 ): Promise<Annotation[]> {
-  const prefix = getAnnotationStoragePrefixForUrl(url);
-  if (prefix === null) return [];
+  const siteId = parseSiteId(url);
+  if (siteId === null) return [];
 
   const result = await area.get(null);
   const annotations: Annotation[] = [];
   for (const [key, value] of Object.entries(result)) {
-    if (!key.startsWith(prefix)) continue;
+    if (getStorageKeySiteId(key) !== siteId) continue;
     annotations.push(...readStorageEntryAnnotations(key, value));
   }
   return annotations;
@@ -405,13 +407,19 @@ async function removeSiteAnnotations(
   area: AnnotationStorageArea,
   url: string,
 ): Promise<AnnotationMutationResult> {
-  const prefix = getAnnotationStoragePrefixForUrl(url);
-  if (prefix === null) return mutationFailure('invalid-command', 'Annotation URL is unsupported.');
+  const siteId = parseSiteId(url);
+  if (siteId === null) return mutationFailure('invalid-command', 'Annotation URL is unsupported.');
 
   const result = await area.get(null);
-  const keys = Object.keys(result).filter((key) => key.startsWith(prefix));
+  const keys = Object.keys(result).filter((key) => getStorageKeySiteId(key) === siteId);
   if (keys.length > 0) await area.remove(keys);
   return { _tag: 'site-cleared', clearedPages: keys.length };
+}
+
+function getStorageKeySiteId(key: string): string | null {
+  const annotationPrefix = 'annotations:';
+  if (!key.startsWith(annotationPrefix)) return null;
+  return parseSiteId(key.slice(annotationPrefix.length));
 }
 
 export interface AnnotationPageGroup {
@@ -419,7 +427,7 @@ export interface AnnotationPageGroup {
   readonly annotations: ReadonlyArray<Annotation>;
 }
 
-/** Group parsed annotations by their canonical origin-and-path page identity. */
+/** Group parsed annotations by their canonical web or local-file page identity. */
 export function groupAnnotationsByPage(
   annotations: ReadonlyArray<Annotation>,
 ): ReadonlyArray<AnnotationPageGroup> {
@@ -441,21 +449,11 @@ export function groupAnnotationsByPage(
 }
 
 function getSiteLabel(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return 'this site';
-  }
+  return getSiteDisplayLabel(url) ?? 'this site';
 }
 
 function getPageLabel(pageId: string): string {
-  try {
-    const parsed = new URL(pageId);
-    const path = `${parsed.pathname}${parsed.search}`;
-    return path === '/' ? 'Home' : path;
-  } catch {
-    return pageId;
-  }
+  return getPageDisplayLabel(pageId) ?? pageId;
 }
 
 function getLatestPageTitle(annotations: ReadonlyArray<Annotation>): string | null {

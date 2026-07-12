@@ -12,7 +12,7 @@ import {
   identifyElement,
   resolveAnnotationAnchor,
 } from '@/lib/anchoring';
-import { getAnnotationStorageKeyForUrl } from '@/lib/page';
+import { getAnnotationStorageKeyForUrl, getPageDisplayLabel } from '@/lib/page';
 import { getAnnotations, saveAnnotation } from '@/lib/storage';
 import { parseAnnotations } from '@/lib/types';
 import type { Annotation, AnnotationAnchor } from '@/lib/types';
@@ -68,7 +68,9 @@ function getCurrentPageTitle(href: string): string {
   if (title) return title.slice(0, 160);
 
   try {
-    return new URL(href).hostname.slice(0, 160);
+    const parsed = new URL(href);
+    const fallback = parsed.hostname || getPageDisplayLabel(href) || 'Untitled page';
+    return fallback.slice(0, 160);
   } catch {
     return 'Untitled page';
   }

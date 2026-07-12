@@ -45,6 +45,15 @@ describe('annotation boundary parsing', () => {
     expect(parseAnnotation(legacy)).toEqual(legacy);
   });
 
+  test('accepts local-file annotations at the persistence boundary', () => {
+    const local: Annotation = {
+      ...validAnnotation,
+      url: 'file:///Users/ramos/workspaces/guided-review/index.html',
+    };
+
+    expect(parseAnnotation(local)).toEqual(local);
+  });
+
   test('parses bounded page and nearby element context', () => {
     const enriched: Annotation = {
       ...validAnnotation,

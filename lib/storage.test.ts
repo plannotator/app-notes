@@ -112,6 +112,31 @@ describe('annotation storage', () => {
     ]);
   });
 
+  test('reads and clears local pages by their parent folder', async () => {
+    const area = new InMemoryStorageArea();
+    const indexUrl = 'file:///Users/ramos/workspaces/guided-review/index.html';
+    const detailsUrl = 'file:///Users/ramos/workspaces/guided-review/details.html?mode=edit';
+    const nestedUrl = 'file:///Users/ramos/workspaces/guided-review/archive/old.html';
+    const otherUrl = 'file:///Users/ramos/workspaces/other-review/index.html';
+    area.seed(getRequiredKey(indexUrl), [annotationFixture('index', 'index note', indexUrl)]);
+    area.seed(getRequiredKey(detailsUrl), [annotationFixture('details', 'details note', detailsUrl)]);
+    area.seed(getRequiredKey(nestedUrl), [annotationFixture('nested', 'nested note', nestedUrl)]);
+    area.seed(getRequiredKey(otherUrl), [annotationFixture('other', 'other note', otherUrl)]);
+    const storage = createAnnotationStorage(area, deterministicDependencies([]));
+
+    expect((await storage.getSiteAnnotations(indexUrl)).map(({ id }) => id).sort()).toEqual([
+      'details',
+      'index',
+    ]);
+
+    expect(await storage.execute({
+      type: 'app-notes:annotation/clear-site',
+      url: detailsUrl,
+    })).toEqual({ _tag: 'site-cleared', clearedPages: 2 });
+    expect((await storage.getAnnotations(nestedUrl)).map(({ id }) => id)).toEqual(['nested']);
+    expect((await storage.getAnnotations(otherUrl)).map(({ id }) => id)).toEqual(['other']);
+  });
+
   test('reads valid annotations across every website', async () => {
     const area = new InMemoryStorageArea();
     const financeUrl = 'https://www.yahoo.com/finance';
@@ -289,6 +314,22 @@ describe('site Markdown export', () => {
     expect(markdown).toContain('Context: 8. We scaled PgBouncer');
     expect(markdown).toContain('**Note**\n\nInvestigate this architecture');
     expect(markdown).not.toContain('## /');
+  });
+
+  test('exports local file workspaces with folder and file labels', () => {
+    const indexUrl = 'file:///Users/ramos/workspaces/guided-review/index.html';
+    const detailsUrl = 'file:///Users/ramos/workspaces/guided-review/details.html?mode=edit';
+    const markdown = formatSiteAnnotationsMarkdown(indexUrl, [
+      annotationFixture('index', 'Review the landing state', indexUrl),
+      annotationFixture('details', 'Review the detail state', detailsUrl),
+    ]);
+
+    expect(markdown).toContain('# Notes for guided-review');
+    expect(markdown).toContain('2 notes across 2 pages');
+    expect(markdown).toContain('## index.html');
+    expect(markdown).toContain('file:///Users/ramos/workspaces/guided-review/index.html');
+    expect(markdown).toContain('## details.html');
+    expect(markdown).not.toContain('?mode=edit');
   });
 });
 

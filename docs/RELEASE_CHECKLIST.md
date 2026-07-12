@@ -77,6 +77,7 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 ### Compatibility and quality
 
 - [ ] Test a conventional multi-page site, a React/Vue SPA, Yahoo, Hacker News, and a page with open Shadow DOM.
+- [ ] In Chrome, enable **Allow access to file URLs**, annotate a local HTML file, save and reload it, then confirm sibling HTML files share one folder workspace while a different folder remains isolated.
 - [ ] Restricted browser pages fail gracefully without broken controls.
 - [ ] Switch the operating system/browser between light and dark appearance; popup, composer, toast, markers, and notes workspace update automatically and remain legible on both light and dark host pages.
 - [ ] Keyboard focus order, visible focus, screen-reader labels, and 200% zoom are usable.
