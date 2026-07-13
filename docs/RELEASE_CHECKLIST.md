@@ -135,7 +135,7 @@ Apple reference: [package a Safari web extension](https://developer.apple.com/do
 - [ ] Chrome small promo tile at 440×280.
 - [ ] Store icon at 128×128 with sufficient transparent padding.
 - [ ] Plain reviewer notes explain that all data is local, how to enable annotations, how to open notes, and how to test multi-page persistence.
-- [ ] Permission explanations cover `storage`, `activeTab`, `tabs`, `webNavigation`, and Chrome's `sidePanel`.
+- [ ] Permission explanations cover `storage`, `tabs`, `webNavigation`, and Chrome's `sidePanel`.
 
 Chrome asset reference: [supplying images](https://developer.chrome.com/docs/webstore/images). Edge listing reference: [extension listing](https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension).
 

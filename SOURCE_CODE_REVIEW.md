@@ -20,7 +20,7 @@ bun run zip:firefox
 The install runs `wxt prepare`, which generates WXT's local TypeScript declarations. The packaged extension is written to:
 
 ```text
-.output/app-notes-0.1.0-firefox.zip
+.output/app-notes-0.1.1-firefox.zip
 ```
 
 No manual source edits or minification steps are required. Tests and type-checking can be run with:
