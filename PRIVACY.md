@@ -14,9 +14,9 @@ To restore annotations, App Notes stores the following in the browser's local ex
 - screenshot metadata, when a screenshot was saved to a connected local folder;
 - annotation creation and update times.
 
-On Chrome, Edge, and Arc, you may optionally connect a real directory with the browser-native File System Access API. When you do, App Notes asks the browser to persist the directory handle and continuously writes `app-notes.md` plus PNG files under `screenshots/` in that directory. The browser controls whether that handle can be persisted and when write permission must be granted again. Screenshot capture is unavailable unless the connected directory currently has write permission. PNG bytes are not retained in extension-private attachment storage.
+On Chrome, Edge, and Arc, you may optionally connect a real directory with the browser-native File System Access API. When you do, App Notes asks the browser to persist the directory handle and continuously writes `app-notes.md` plus PNG files under `screenshots/` in that directory. The browser controls whether that handle can be persisted and when write permission must be granted again. Screenshot capture is unavailable unless the connected directory currently has write permission. You can change or disconnect the directory at any time. Changing or disconnecting stops future synchronization to the previous directory but leaves the files already written there in place. PNG bytes are not retained in extension-private attachment storage.
 
-Firefox and other browsers without the File System Access API do not show the folder connection or screenshot controls. Ordinary text annotations continue to use local extension storage.
+Firefox, Safari, and other browsers without the File System Access API do not show the folder connection or screenshot controls. Ordinary text annotations continue to use local extension storage.
 
 This data stays on the device and browser profile where App Notes is installed. App Notes has no account system, advertising, analytics, or Plannotator-operated server.
 

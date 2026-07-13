@@ -19,7 +19,10 @@ import type { Annotation, AnnotationAnchor } from '@/lib/types';
 import type { AnnotationStorageKey } from '@/lib/page';
 import { captureVisibleElement } from '@/lib/element-capture';
 import type { ElementScreenshotDraft } from '@/lib/element-capture';
-import { getBrowserLocalFolderState } from '@/lib/local-folder';
+import {
+  getBrowserLocalFolderState,
+  parseLocalFolderStateChangedMessage,
+} from '@/lib/local-folder';
 
 interface SelectedElement {
   readonly annotationId: string;
@@ -561,6 +564,11 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
 
   useEffect(() => {
     const handleMessage = (message: unknown) => {
+      const folderChange = parseLocalFolderStateChangedMessage(message);
+      if (folderChange !== null) {
+        setCaptureAvailable(folderChange.state._tag === 'connected');
+        return undefined;
+      }
       if (!isRuntimeMessage(message)) return undefined;
 
       if (message.type === 'app-notes-get-annotation-mode') {

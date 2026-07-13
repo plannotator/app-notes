@@ -83,6 +83,7 @@ describe('annotation boundary parsing', () => {
         mimeType: 'image/png',
         width: 640,
         height: 360,
+        path: `screenshots/${validAnnotation.id}.png`,
       },
     };
 
@@ -95,6 +96,15 @@ describe('annotation boundary parsing', () => {
       ...withScreenshot,
       screenshot: { ...withScreenshot.screenshot, dataUrl: 'data:image/png;base64,AAAA' },
     })).toBeNull();
+    expect(parseAnnotation({
+      ...withScreenshot,
+      screenshot: {
+        id: validAnnotation.id,
+        mimeType: 'image/png',
+        width: 640,
+        height: 360,
+      },
+    })).toEqual(validAnnotation);
   });
 
   test('strictly parses mutation commands', () => {

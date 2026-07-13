@@ -48,7 +48,7 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] Capturing an element hides every App Notes overlay, produces a clean PNG of the visible selection, and shows a preview before save.
 - [ ] Retaking and removing a draft screenshot work; saving writes the PNG and updated Markdown into the connected folder.
 - [ ] Revoking folder permission disables capture; Reconnect restores it only after write permission is granted.
-- [ ] Firefox does not show Connect folder or screenshot capture controls.
+- [ ] Firefox and Safari do not show Connect folder or screenshot capture controls.
 - [ ] Saving by button and `Cmd/Ctrl+Enter` works; blank notes cannot be saved.
 - [ ] Clicking away once says the draft is safe in plain language; clicking again discards it.
 - [ ] `Esc` follows the same guarded-draft behavior.
@@ -77,6 +77,7 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] Copying and exporting notes continues to produce ordinary site Markdown without a screenshot ZIP path.
 - [ ] A connected folder continuously contains `app-notes.md` and referenced PNG files under `screenshots/`.
 - [ ] Connected, Reconnect, and Sync error states are clear, compact, and keyboard accessible.
+- [ ] Changing folders switches future synchronization; disconnecting stops sync without deleting existing user files.
 - [ ] Hacker News smoke test: annotate two story titles and confirm their titles appear in the export.
 - [ ] Clearing site notes removes only that site's notes and requires confirmation.
 - [ ] The badge count reflects only the current page.

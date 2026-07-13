@@ -23,7 +23,7 @@ Run `bun test` and `bun run build` before submitting changes.
 
 For local `file://` pages, enable **Allow access to file URLs** in App Notes' Chrome extension settings, then reload the file.
 
-To enable screenshots on Chrome, Edge, or Arc, open the notes workspace, choose **Connect** under **Local folder**, and select a writable directory. Firefox keeps ordinary text notes and Markdown copy/export behavior, but does not show folder connection or screenshot controls because it does not support this browser API.
+To enable screenshots on Chrome, Edge, or Arc, open the notes workspace, choose **Connect** under **Local folder**, and select a writable directory. Firefox and Safari keep ordinary text notes and Markdown copy/export behavior, but do not show folder connection or screenshot controls because they do not support this browser API.
 
 See the [release checklist](docs/RELEASE_CHECKLIST.md) and [privacy policy](PRIVACY.md).
 

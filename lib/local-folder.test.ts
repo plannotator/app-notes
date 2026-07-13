@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import {
   createLocalFolderWorkspace,
   formatAllAnnotationsMarkdown,
+  parseLocalFolderStateChangedMessage,
 } from './local-folder';
 import type {
   LocalFolderConnection,
   LocalFolderRepository,
+  LocalFolderState,
 } from './local-folder';
 import type { Annotation, AnnotationScreenshotCapture } from './types';
 
@@ -15,7 +17,7 @@ describe('local-folder workspace', () => {
     const workspace = createLocalFolderWorkspace(repository, false);
 
     expect(await workspace.getState()).toEqual({ _tag: 'unsupported' });
-    expect(await workspace.writeScreenshot(screenshotCapture())).toBe(false);
+    expect(await workspace.writeScreenshot(screenshotCapture())).toBeNull();
   });
 
   test('persists the chosen handle and writes Markdown plus PNG files', async () => {
@@ -29,13 +31,35 @@ describe('local-folder workspace', () => {
       name: 'agent-notes',
     });
     expect((await repository.load())?.handle).toBe(directory);
-    expect(await workspace.writeScreenshot(screenshotCapture())).toBe(true);
+    expect(await workspace.writeScreenshot(screenshotCapture())).toBe(
+      'screenshots/annotation-pricing.png',
+    );
     await workspace.sync([annotation]);
 
     expect(directory.readText('app-notes.md')).toContain(
       '![Screenshot of Pricing card](<screenshots/annotation-pricing.png>)',
     );
     expect(directory.readBlob('screenshots/annotation-pricing.png')?.type).toBe('image/png');
+  });
+
+  test('disconnects without deleting the user-owned workspace files', async () => {
+    const repository = new InMemoryRepository();
+    const directory = new InMemoryDirectoryHandle('agent-notes', 'granted');
+    const states: LocalFolderState[] = [];
+    const workspace = createLocalFolderWorkspace(
+      repository,
+      true,
+      async (state) => { states.push(state); },
+    );
+    const annotation = screenshotAnnotation();
+    await workspace.connect(directory, [annotation]);
+    await workspace.writeScreenshot(screenshotCapture());
+
+    expect(await workspace.disconnect()).toEqual({ _tag: 'disconnected' });
+    expect(await repository.load()).toBeNull();
+    expect(directory.readText('app-notes.md')).toContain('Tighten this section');
+    expect(directory.readBlob('screenshots/annotation-pricing.png')).not.toBeNull();
+    expect(states.at(-1)).toEqual({ _tag: 'disconnected' });
   });
 
   test('requires currently granted write permission and supports reconnect', async () => {
@@ -45,7 +69,7 @@ describe('local-folder workspace', () => {
     const workspace = createLocalFolderWorkspace(repository, true);
 
     expect(await workspace.getState()).toEqual({ _tag: 'reconnect', name: 'agent-notes' });
-    expect(await workspace.writeScreenshot(screenshotCapture())).toBe(false);
+    expect(await workspace.writeScreenshot(screenshotCapture())).toBeNull();
 
     directory.setRequestPermission('granted');
     expect(await workspace.reconnect([])).toEqual({ _tag: 'connected', name: 'agent-notes' });
@@ -74,8 +98,24 @@ describe('local-folder Markdown', () => {
     const markdown = formatAllAnnotationsMarkdown([screenshotAnnotation()]);
 
     expect(markdown.startsWith('# App Notes')).toBe(true);
+    expect(markdown).toContain('## Notes for example.com');
+    expect(markdown).toContain('### Pricing');
+    expect(markdown).toContain('#### Pricing card');
     expect(markdown).toContain('screenshots/annotation-pricing.png');
     expect(markdown).toContain('Tighten this section');
+  });
+});
+
+describe('local-folder runtime boundary', () => {
+  test('strictly parses state-change notifications', () => {
+    const message = {
+      type: 'app-notes:local-folder/state-changed',
+      state: { _tag: 'connected', name: 'agent-notes' },
+    } as const;
+
+    expect(parseLocalFolderStateChangedMessage(message)).toEqual(message);
+    expect(parseLocalFolderStateChangedMessage({ ...message, unexpected: true })).toBeNull();
+    expect(parseLocalFolderStateChangedMessage({ ...message, state: { _tag: 'connected' } })).toBeNull();
   });
 });
 
@@ -88,6 +128,10 @@ class InMemoryRepository implements LocalFolderRepository {
 
   async save(connection: LocalFolderConnection): Promise<void> {
     this.connection = connection;
+  }
+
+  async clear(): Promise<void> {
+    this.connection = null;
   }
 }
 
@@ -205,6 +249,7 @@ function screenshotAnnotation(): Annotation {
       mimeType: 'image/png',
       width: 640,
       height: 360,
+      path: 'screenshots/annotation-pricing.png',
     },
   };
 }

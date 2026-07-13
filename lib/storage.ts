@@ -17,6 +17,7 @@ import type {
   AnnotationMutationFailedResult,
   AnnotationMutationResult,
   AnnotationNoteUpdate,
+  AnnotationScreenshot,
   ClearAnnotationsResult,
   ClearSiteAnnotationsResult,
   CreateAnnotationResult,
@@ -249,6 +250,8 @@ export async function exportSiteAnnotations(url: string): Promise<string> {
 
 /** Optional local screenshot paths used when Markdown and PNG files share a workspace. */
 export interface AnnotationMarkdownOptions {
+  /** Nest a complete site beneath an existing document title. */
+  readonly nested?: boolean;
   readonly screenshotPath: (annotation: Annotation) => string | null;
 }
 
@@ -262,18 +265,21 @@ export function formatSiteAnnotationsMarkdown(
   if (annotations.length === 0) return `# No annotations for ${site}\n`;
 
   const groups = groupAnnotationsByPage(annotations);
-  let markdown = `# Notes for ${site}\n\n`;
+  const siteHeading = options?.nested === true ? '##' : '#';
+  const pageHeading = options?.nested === true ? '###' : '##';
+  const annotationHeading = options?.nested === true ? '####' : '###';
+  let markdown = `${siteHeading} Notes for ${site}\n\n`;
   markdown += `${annotations.length} ${annotations.length === 1 ? 'note' : 'notes'} across `;
   markdown += `${groups.length} ${groups.length === 1 ? 'page' : 'pages'}\n\n`;
 
   for (const group of groups) {
     const pageTitle = getLatestPageTitle(group.annotations);
     const pageLabel = getPageLabel(group.pageId);
-    markdown += `## ${pageTitle ?? pageLabel}\n\n`;
+    markdown += `${pageHeading} ${pageTitle ?? pageLabel}\n\n`;
     if (pageTitle && pageLabel !== 'Home') markdown += `Path: \`${pageLabel}\`\n\n`;
     markdown += `${group.pageId}\n\n`;
     for (const annotation of group.annotations) {
-      markdown += formatAnnotationMarkdown(annotation, '###', options);
+      markdown += formatAnnotationMarkdown(annotation, annotationHeading, options);
     }
   }
 
@@ -344,6 +350,24 @@ async function createAnnotation(
   const replay = existing.find((annotation) => annotation.id === payload.id);
   if (replay !== undefined) return { _tag: 'created', annotation: replay };
 
+  let screenshot: AnnotationScreenshot | undefined;
+  if (payload.screenshot !== undefined) {
+    const path = await dependencies.workspace.writeScreenshot(payload.screenshot);
+    if (path === null) {
+      return mutationFailure(
+        'storage-error',
+        'Connect a writable local folder before saving a screenshot.',
+      );
+    }
+    screenshot = {
+      id: payload.screenshot.id,
+      mimeType: payload.screenshot.mimeType,
+      width: payload.screenshot.width,
+      height: payload.screenshot.height,
+      path,
+    };
+  }
+
   const now = dependencies.now();
   const annotation: Annotation = {
     id: payload.id,
@@ -355,25 +379,8 @@ async function createAnnotation(
     note: payload.note,
     color: payload.color,
     pageTitle: payload.pageTitle,
-    ...(payload.screenshot !== undefined ? {
-      screenshot: {
-        id: payload.screenshot.id,
-        mimeType: payload.screenshot.mimeType,
-        width: payload.screenshot.width,
-        height: payload.screenshot.height,
-      },
-    } : {}),
+    ...(screenshot !== undefined ? { screenshot } : {}),
   };
-
-  if (
-    payload.screenshot !== undefined
-    && !await dependencies.workspace.writeScreenshot(payload.screenshot)
-  ) {
-    return mutationFailure(
-      'storage-error',
-      'Connect a writable local folder before saving a screenshot.',
-    );
-  }
   try {
     const next = [...existing, annotation];
     await area.set({ [key]: next });
@@ -543,7 +550,7 @@ function getLatestPageTitle(annotations: ReadonlyArray<Annotation>): string | nu
 
 function formatAnnotationMarkdown(
   annotation: Annotation,
-  headingLevel: '##' | '###',
+  headingLevel: '##' | '###' | '####',
   options?: AnnotationMarkdownOptions,
 ): string {
   const selectedText = annotation.anchor.text;
