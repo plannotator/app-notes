@@ -5,25 +5,16 @@ import { openNotesWorkspace } from '@/lib/open-notes-workspace';
 import {
   parseCaptureVisibleTabRequest,
 } from '@/lib/element-capture';
-import {
-  browserLocalFolderRepository,
-  createLocalFolderWorkspace,
-  deleteLegacyScreenshotStorage,
-} from '@/lib/local-folder';
+import { browserScreenshotStore } from '@/lib/screenshot-store';
 import type { CaptureVisibleTabResult } from '@/lib/element-capture';
 
 export default defineBackground(() => {
-  const localFolder = createLocalFolderWorkspace(
-    browserLocalFolderRepository,
-    isChromiumRuntime(),
-  );
   const annotationStorage = createAnnotationStorage(browser.storage.local, {
     now: () => Date.now(),
-    workspace: localFolder,
+    screenshots: browserScreenshotStore,
   });
   const badgeGenerations = new Map<number, number>();
 
-  deleteLegacyScreenshotStorage().catch(() => undefined);
   browser.action.setBadgeBackgroundColor({ color: '#2563eb' }).catch(() => undefined);
 
   const updateBadgeForTab = async (tabId: number, url?: string) => {
@@ -75,11 +66,9 @@ export default defineBackground(() => {
   };
 
   browser.runtime.onMessage.addListener((message: unknown, sender) => {
-    if (isLocalFolderStateRequest(message)) return localFolder.getState();
-
     const captureRequest = parseCaptureVisibleTabRequest(message);
     if (captureRequest !== null) {
-      return captureVisibleTab(sender.tab, localFolder);
+      return captureVisibleTab(sender.tab);
     }
 
     const command = parseAnnotationMutationCommand(message);
@@ -146,12 +135,7 @@ export default defineBackground(() => {
 
 async function captureVisibleTab(
   tab: { readonly active?: boolean; readonly windowId?: number } | undefined,
-  localFolder: ReturnType<typeof createLocalFolderWorkspace>,
 ): Promise<CaptureVisibleTabResult> {
-  const folderState = await localFolder.getState();
-  if (folderState._tag !== 'connected') {
-    return { _tag: 'capture-failed', message: 'Reconnect the local folder to capture screenshots.' };
-  }
   if (tab?.active !== true || tab.windowId === undefined) {
     return { _tag: 'capture-failed', message: 'Keep this page active and try again.' };
   }
@@ -164,16 +148,4 @@ async function captureVisibleTab(
   } catch {
     return { _tag: 'capture-failed', message: 'The browser couldn’t capture this page.' };
   }
-}
-
-function isLocalFolderStateRequest(input: unknown): boolean {
-  return typeof input === 'object'
-    && input !== null
-    && !Array.isArray(input)
-    && Object.keys(input).length === 1
-    && Reflect.get(input, 'type') === 'app-notes:local-folder/state';
-}
-
-function isChromiumRuntime(): boolean {
-  return /(?:Chrom(?:e|ium)|Edg)\//.test(navigator.userAgent);
 }

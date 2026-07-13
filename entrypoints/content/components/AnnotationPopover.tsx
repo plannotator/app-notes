@@ -10,7 +10,6 @@ interface AnnotationPopoverProps {
   label: string;
   note: string;
   screenshot: ElementScreenshotDraft | null;
-  captureAvailable: boolean;
   isCapturing: boolean;
   captureError: string;
   onNoteChange: (note: string) => void;
@@ -69,7 +68,6 @@ export function AnnotationPopover({
   label,
   note,
   screenshot,
-  captureAvailable,
   isCapturing,
   captureError,
   onNoteChange,
@@ -187,7 +185,7 @@ export function AnnotationPopover({
         </button>
       </header>
 
-      {screenshot === null && captureAvailable ? (
+      {screenshot === null ? (
         <button
           type="button"
           className="app-notes-capture-button"
@@ -196,9 +194,9 @@ export function AnnotationPopover({
         >
           <Camera aria-hidden="true" size={14} strokeWidth={2.1} />
           <span>{isCapturing ? 'Capturing…' : 'Capture element'}</span>
-          <span className="app-notes-capture-hint">PNG · local folder</span>
+          <span className="app-notes-capture-hint">PNG</span>
         </button>
-      ) : screenshot !== null ? (
+      ) : (
         <figure className="app-notes-screenshot-preview">
           <img
             src={screenshot.dataUrl}
@@ -230,7 +228,7 @@ export function AnnotationPopover({
             </span>
           </figcaption>
         </figure>
-      ) : null}
+      )}
 
       <label className="app-notes-editor-label" htmlFor={editorId}>Note</label>
       <textarea

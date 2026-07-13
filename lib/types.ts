@@ -53,7 +53,7 @@ export interface Annotation {
   readonly color: string;
   /** The document title captured when the annotation was created. */
   readonly pageTitle?: string;
-  /** Optional screenshot metadata; PNG bytes live in the connected local folder. */
+  /** Optional screenshot metadata; PNG bytes live in extension-owned blob storage. */
   readonly screenshot?: AnnotationScreenshot;
 }
 

@@ -19,7 +19,6 @@ import type { Annotation, AnnotationAnchor } from '@/lib/types';
 import type { AnnotationStorageKey } from '@/lib/page';
 import { captureVisibleElement } from '@/lib/element-capture';
 import type { ElementScreenshotDraft } from '@/lib/element-capture';
-import { getBrowserLocalFolderState } from '@/lib/local-folder';
 
 interface SelectedElement {
   readonly annotationId: string;
@@ -108,7 +107,6 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
   const [screenshot, setScreenshot] = useState<ElementScreenshotDraft | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureError, setCaptureError] = useState('');
-  const [captureAvailable, setCaptureAvailable] = useState(false);
   const [annotations, setAnnotations] = useState<ReadonlyArray<Annotation>>([]);
   const [exitWarning, setExitWarning] = useState<ExitWarningState | null>(null);
 
@@ -303,23 +301,6 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
   useEffect(() => {
     loadAnnotationsForPage(pageRef.current).catch(() => undefined);
   }, [loadAnnotationsForPage]);
-
-  useEffect(() => {
-    const annotationId = selected?.annotationId;
-    if (annotationId === undefined) {
-      setCaptureAvailable(false);
-      return;
-    }
-
-    setCaptureAvailable(false);
-    getBrowserLocalFolderState()
-      .then((state) => {
-        if (selectedRef.current?.annotationId === annotationId) {
-          setCaptureAvailable(state._tag === 'connected');
-        }
-      })
-      .catch(() => setCaptureAvailable(false));
-  }, [selected?.annotationId]);
 
   useEffect(() => {
     const handleStorageChange = (
@@ -679,7 +660,6 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
             label={selected.label}
             note={draft}
             screenshot={screenshot}
-            captureAvailable={captureAvailable}
             isCapturing={isCapturing}
             captureError={captureError}
             onNoteChange={updateDraft}

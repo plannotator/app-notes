@@ -9,7 +9,7 @@ import {
   parseAnnotationMutationResult,
   parseAnnotations,
 } from './types';
-import type { LocalFolderWorkspace } from './local-folder';
+import type { AnnotationScreenshotStore } from './screenshot-store';
 import type {
   Annotation,
   AnnotationCreatePayload,
@@ -34,7 +34,7 @@ export interface AnnotationStorageArea {
 /** Deterministic dependencies owned by the background composition root. */
 export interface AnnotationStorageDependencies {
   readonly now: () => number;
-  readonly workspace: LocalFolderWorkspace;
+  readonly screenshots: AnnotationScreenshotStore;
 }
 
 /** A serialized, background-owned annotation storage service. */
@@ -247,7 +247,7 @@ export async function exportSiteAnnotations(url: string): Promise<string> {
   return formatSiteAnnotationsMarkdown(url, annotations);
 }
 
-/** Optional local screenshot paths used when Markdown and PNG files share a workspace. */
+/** Optional attachment paths used when Markdown is packaged with screenshot files. */
 export interface AnnotationMarkdownOptions {
   readonly screenshotPath: (annotation: Annotation) => string | null;
 }
@@ -365,22 +365,14 @@ async function createAnnotation(
     } : {}),
   };
 
-  if (
-    payload.screenshot !== undefined
-    && !await dependencies.workspace.writeScreenshot(payload.screenshot)
-  ) {
-    return mutationFailure(
-      'storage-error',
-      'Connect a writable local folder before saving a screenshot.',
-    );
+  if (payload.screenshot !== undefined) {
+    await dependencies.screenshots.save(payload.screenshot);
   }
   try {
-    const next = [...existing, annotation];
-    await area.set({ [key]: next });
-    await syncWorkspaceBestEffort(area, dependencies.workspace);
+    await area.set({ [key]: [...existing, annotation] });
   } catch (cause: unknown) {
     if (payload.screenshot !== undefined) {
-      await removeScreenshotsBestEffort(dependencies.workspace, [payload.screenshot.id]);
+      await removeScreenshotsBestEffort(dependencies.screenshots, [payload.screenshot.id]);
     }
     throw cause;
   }
@@ -407,7 +399,6 @@ async function updateAnnotationNote(
   const updated: Annotation = { ...current, note, updatedAt: dependencies.now() };
   const next = annotations.map((annotation) => (annotation.id === id ? updated : annotation));
   await area.set({ [key]: next });
-  await syncWorkspaceBestEffort(area, dependencies.workspace);
   return { _tag: 'updated', annotation: updated };
 }
 
@@ -427,9 +418,8 @@ async function removeAnnotation(
 
   await area.set({ [key]: next });
   if (removed?.screenshot !== undefined) {
-    await removeScreenshotsBestEffort(dependencies.workspace, [removed.screenshot.id]);
+    await removeScreenshotsBestEffort(dependencies.screenshots, [removed.screenshot.id]);
   }
-  await syncWorkspaceBestEffort(area, dependencies.workspace);
   return { _tag: 'deleted', deleted: true };
 }
 
@@ -443,8 +433,7 @@ async function removePageAnnotations(
 
   const annotations = await readAnnotations(area, url);
   await area.remove(key);
-  await removeScreenshotsBestEffort(dependencies.workspace, getScreenshotIds(annotations));
-  await syncWorkspaceBestEffort(area, dependencies.workspace);
+  await removeScreenshotsBestEffort(dependencies.screenshots, getScreenshotIds(annotations));
   return { _tag: 'cleared' };
 }
 
@@ -460,8 +449,7 @@ async function removeSiteAnnotations(
   const keys = Object.keys(result).filter((key) => getStorageKeySiteId(key) === siteId);
   const annotations = keys.flatMap((key) => readStorageEntryAnnotations(key, result[key]));
   if (keys.length > 0) await area.remove(keys);
-  await removeScreenshotsBestEffort(dependencies.workspace, getScreenshotIds(annotations));
-  await syncWorkspaceBestEffort(area, dependencies.workspace);
+  await removeScreenshotsBestEffort(dependencies.screenshots, getScreenshotIds(annotations));
   return { _tag: 'site-cleared', clearedPages: keys.length };
 }
 
@@ -471,24 +459,13 @@ function getScreenshotIds(annotations: ReadonlyArray<Annotation>): string[] {
 }
 
 async function removeScreenshotsBestEffort(
-  workspace: LocalFolderWorkspace,
+  store: AnnotationScreenshotStore,
   ids: ReadonlyArray<string>,
 ): Promise<void> {
   try {
-    await workspace.removeScreenshots(ids);
+    await store.remove(ids);
   } catch {
-    // Annotation state is authoritative; a stale local file is safer than a false mutation failure.
-  }
-}
-
-async function syncWorkspaceBestEffort(
-  area: AnnotationStorageArea,
-  workspace: LocalFolderWorkspace,
-): Promise<void> {
-  try {
-    await workspace.sync(await readAllAnnotations(area));
-  } catch {
-    // Text notes remain authoritative in extension storage; folder state exposes sync failures.
+    // Annotation state is authoritative; an unreachable orphan blob is safer than a false failure.
   }
 }
 

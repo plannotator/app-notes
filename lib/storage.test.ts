@@ -16,7 +16,7 @@ import type {
   AnnotationStorageArea,
   AnnotationStorageDependencies,
 } from './storage';
-import type { LocalFolderState, LocalFolderWorkspace } from './local-folder';
+import type { AnnotationScreenshotStore } from './screenshot-store';
 
 const PAGE_URL = 'https://www.yahoo.com/news';
 
@@ -242,33 +242,12 @@ describe('annotation storage', () => {
     ]);
   });
 
-  test('rejects screenshot annotations when no writable folder is available', async () => {
-    const area = new InMemoryStorageArea();
-    const workspace = new InMemoryWorkspace(false);
-    const storage = createAnnotationStorage(
-      area,
-      deterministicDependencies([100], workspace),
-    );
-    const payload = createScreenshotPayload('blocked capture', PAGE_URL);
-
-    expect(await storage.execute({
-      type: 'app-notes:annotation/create',
-      payload,
-    })).toEqual({
-      _tag: 'failed',
-      code: 'storage-error',
-      message: 'Connect a writable local folder before saving a screenshot.',
-    });
-    expect(await storage.getAnnotations(PAGE_URL)).toEqual([]);
-    expect(workspace.get(payload.id)).toBeNull();
-  });
-
   test('persists and removes an attached screenshot with its annotation', async () => {
     const area = new InMemoryStorageArea();
-    const workspace = new InMemoryWorkspace();
+    const screenshots = new InMemoryScreenshotStore();
     const storage = createAnnotationStorage(
       area,
-      deterministicDependencies([100], workspace),
+      deterministicDependencies([100], screenshots),
     );
     const payload: AnnotationCreatePayload = {
       ...createPayload('screenshot note'),
@@ -293,22 +272,22 @@ describe('annotation storage', () => {
       width: 320,
       height: 180,
     });
-    expect(workspace.get(payload.id)).not.toBeNull();
+    expect(await screenshots.get(payload.id)).not.toBeNull();
 
     expect(await storage.execute({
       type: 'app-notes:annotation/delete',
       url: PAGE_URL,
       id: payload.id,
     })).toEqual({ _tag: 'deleted', deleted: true });
-    expect(workspace.get(payload.id)).toBeNull();
+    expect(await screenshots.get(payload.id)).toBeNull();
   });
 
   test('clears attached screenshots with every note on a site', async () => {
     const area = new InMemoryStorageArea();
-    const workspace = new InMemoryWorkspace();
+    const screenshots = new InMemoryScreenshotStore();
     const storage = createAnnotationStorage(
       area,
-      deterministicDependencies([100, 200], workspace),
+      deterministicDependencies([100, 200], screenshots),
     );
     const payloads = [
       createScreenshotPayload('first capture', PAGE_URL),
@@ -325,8 +304,8 @@ describe('annotation storage', () => {
       type: 'app-notes:annotation/clear-site',
       url: PAGE_URL,
     })).toEqual({ _tag: 'site-cleared', clearedPages: 2 });
-    expect(workspace.get(firstId)).toBeNull();
-    expect(workspace.get(secondId)).toBeNull();
+    expect(await screenshots.get(firstId)).toBeNull();
+    expect(await screenshots.get(secondId)).toBeNull();
   });
 });
 
@@ -474,53 +453,29 @@ class RecordingTransport implements AnnotationRuntimeTransport {
   }
 }
 
-class InMemoryWorkspace implements LocalFolderWorkspace {
+class InMemoryScreenshotStore implements AnnotationScreenshotStore {
   private readonly blobs = new Map<string, Blob>();
-  readonly snapshots: ReadonlyArray<Annotation>[] = [];
 
-  constructor(private readonly available = true) {}
-
-  async connect(
-    _handle: AppNotesFileSystemDirectoryHandle,
-    _annotations: ReadonlyArray<Annotation>,
-  ): Promise<LocalFolderState> {
-    return { _tag: 'connected', name: 'test' };
+  async save(capture: AnnotationScreenshotCapture): Promise<void> {
+    this.blobs.set(capture.id, new Blob([capture.dataUrl], { type: capture.mimeType }));
   }
 
-  get(id: string): Blob | null {
+  async get(id: string): Promise<Blob | null> {
     return this.blobs.get(id) ?? null;
   }
 
-  async getState(): Promise<LocalFolderState> {
-    return { _tag: 'connected', name: 'test' };
-  }
-
-  async reconnect(_annotations: ReadonlyArray<Annotation>): Promise<LocalFolderState> {
-    return { _tag: 'connected', name: 'test' };
-  }
-
-  async removeScreenshots(ids: ReadonlyArray<string>): Promise<void> {
+  async remove(ids: ReadonlyArray<string>): Promise<void> {
     for (const id of ids) this.blobs.delete(id);
-  }
-
-  async sync(annotations: ReadonlyArray<Annotation>): Promise<void> {
-    this.snapshots.push(structuredClone(annotations));
-  }
-
-  async writeScreenshot(capture: AnnotationScreenshotCapture): Promise<boolean> {
-    if (!this.available) return false;
-    this.blobs.set(capture.id, new Blob([capture.dataUrl], { type: capture.mimeType }));
-    return true;
   }
 }
 
 function deterministicDependencies(
   times: readonly number[],
-  workspace: LocalFolderWorkspace = new InMemoryWorkspace(),
+  screenshots: AnnotationScreenshotStore = new InMemoryScreenshotStore(),
 ): AnnotationStorageDependencies {
   const remainingTimes = [...times];
   return {
-    workspace,
+    screenshots,
     now: () => {
       const time = remainingTimes.shift();
       if (time === undefined) throw new Error('Missing deterministic time');
