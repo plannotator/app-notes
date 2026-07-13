@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <title>App Notes — Annotate any element</title>
+  <link rel="stylesheet" href="store.css">
+</head>
+<body>
+  <main class="store-page">
+    <header class="masthead">
+      <div class="masthead-copy">
+        <div class="eyebrow"><img src="../app-notes-icon-128.png" alt="">App Notes</div>
+        <h1>Leave feedback exactly where it belongs.</h1>
+        <p class="subtitle">Click any page element and add a clear, useful note.</p>
+      </div>
+      <div class="privacy-pill"><span class="privacy-dot"></span>Saved in your browser</div>
+    </header>
+
+    <section class="browser-window" aria-label="App Notes annotation example">
+      <div class="browser-bar">
+        <div class="traffic"><span></span><span></span><span></span></div>
+        <div class="address">northstar.example</div>
+        <div class="toolbar-note">N</div>
+      </div>
+      <div class="browser-content">
+        <article class="demo-site">
+          <nav class="site-nav">
+            <div class="site-brand"><span class="site-mark"></span>Northstar</div>
+            <div class="site-links"><span>Product</span><span>Solutions</span><span>Pricing</span></div>
+            <div class="site-button">Start free</div>
+          </nav>
+          <div class="hero">
+            <div>
+              <div class="hero-kicker">Plan with confidence</div>
+              <h2>Turn scattered work into clear momentum.</h2>
+              <p>Keep every project, decision, and deadline in one calm workspace built for focused teams.</p>
+              <div class="hero-actions"><span>Start free</span><span>See how it works</span></div>
+            </div>
+            <div class="dashboard-card">
+              <div class="card-top"><span>Weekly progress</span><span>Last 7 days</span></div>
+              <div class="metric">74% <span class="metric-up">↑ 12%</span></div>
+              <div class="chart"></div>
+            </div>
+          </div>
+          <div class="feature-strip">
+            <div class="feature-card"><div class="feature-icon"></div><h3>Shared plans</h3><p>One place for priorities and decisions.</p></div>
+            <div class="feature-card"><div class="feature-icon"></div><h3>Clear ownership</h3><p>Know what moves next and who owns it.</p></div>
+            <div class="feature-card"><div class="feature-icon"></div><h3>Useful updates</h3><p>Stay current without another meeting.</p></div>
+          </div>
+
+          <div class="selection-label">h2.hero-title</div>
+          <div class="selection-box"></div>
+          <aside class="note-popover">
+            <div class="note-head">
+              <div class="note-icon">▣</div>
+              <div><div class="note-title">Add note</div><div class="note-target">h2.hero-title</div></div>
+              <div class="note-close">×</div>
+            </div>
+            <div class="note-field">Make this headline more specific to product teams.</div>
+            <div class="note-footer">
+              <span class="shortcut"><kbd>⌘</kbd><kbd>↵</kbd> to add</span>
+              <span class="add-note">Add note</span>
+            </div>
+          </aside>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

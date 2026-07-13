@@ -15,6 +15,10 @@ To restore and export annotations, App Notes stores the following in the browser
 
 This data stays on the device and browser profile where App Notes is installed. App Notes has no account system, advertising, analytics, or Plannotator-operated server.
 
+## Chrome Web Store Limited Use
+
+The use of information received from Google APIs will adhere to the Chrome Web Store User Data Policy, including the Limited Use requirements.
+
 ## When data leaves the extension
 
 Data leaves App Notes only when you explicitly copy notes to the clipboard, export a Markdown file, or share that output yourself. Websites you visit and their own browser behavior remain subject to their privacy policies.
