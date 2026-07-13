@@ -34,26 +34,11 @@ export interface AnnotationScreenshot {
   readonly mimeType: 'image/png';
   readonly width: number;
   readonly height: number;
-  /** Agent-readable path relative to the connected workspace directory. */
-  readonly path: string;
 }
 
-/** A screenshot crossing the runtime boundary before its PNG is written locally. */
-export interface AnnotationScreenshotCapture {
-  readonly id: string;
-  readonly mimeType: 'image/png';
-  readonly width: number;
-  readonly height: number;
+/** A screenshot crossing the runtime boundary before its PNG is stored as a blob. */
+export interface AnnotationScreenshotCapture extends AnnotationScreenshot {
   readonly dataUrl: string;
-}
-
-/** Build the only relative PNG path App Notes may persist for an annotation. */
-export function createAnnotationScreenshotPath(id: string): string {
-  const filename = id
-    .replace(/[^a-z0-9_-]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 96) || 'screenshot';
-  return `screenshots/${filename}.png`;
 }
 
 /** One persisted page annotation. */
@@ -224,11 +209,8 @@ export function parseAnnotation(input: unknown): Annotation | null {
   let screenshot: AnnotationScreenshot | undefined;
   if (Object.hasOwn(input, 'screenshot')) {
     const parsedScreenshot = parseAnnotationScreenshot(input.screenshot);
-    if (parsedScreenshot !== null && parsedScreenshot.id === input.id) {
-      screenshot = parsedScreenshot;
-    } else if (!isLegacyPrivateScreenshot(input.screenshot, input.id)) {
-      return null;
-    }
+    if (parsedScreenshot === null || parsedScreenshot.id !== input.id) return null;
+    screenshot = parsedScreenshot;
   }
 
   return {
@@ -398,9 +380,8 @@ const CREATE_PAYLOAD_REQUIRED_KEYS = [
   'pageTitle',
 ] as const;
 const CREATE_PAYLOAD_ALLOWED_KEYS = [...CREATE_PAYLOAD_REQUIRED_KEYS, 'screenshot'] as const;
-const LEGACY_SCREENSHOT_KEYS = ['id', 'mimeType', 'width', 'height'] as const;
-const SCREENSHOT_KEYS = [...LEGACY_SCREENSHOT_KEYS, 'path'] as const;
-const SCREENSHOT_CAPTURE_KEYS = [...LEGACY_SCREENSHOT_KEYS, 'dataUrl'] as const;
+const SCREENSHOT_KEYS = ['id', 'mimeType', 'width', 'height'] as const;
+const SCREENSHOT_CAPTURE_KEYS = [...SCREENSHOT_KEYS, 'dataUrl'] as const;
 const CREATE_COMMAND_KEYS = ['type', 'payload'] as const;
 const UPDATE_COMMAND_KEYS = ['type', 'url', 'id', 'note'] as const;
 const DELETE_COMMAND_KEYS = ['type', 'url', 'id'] as const;
@@ -416,14 +397,12 @@ function parseAnnotationScreenshot(input: unknown): AnnotationScreenshot | null 
   if (!isRecord(input) || !hasExactKeys(input, SCREENSHOT_KEYS)) return null;
   if (!isNonEmptyString(input.id) || input.mimeType !== 'image/png') return null;
   if (!isSafePositiveInteger(input.width) || !isSafePositiveInteger(input.height)) return null;
-  if (input.path !== createAnnotationScreenshotPath(input.id)) return null;
 
   return {
     id: input.id,
     mimeType: input.mimeType,
     width: input.width,
     height: input.height,
-    path: input.path,
   };
 }
 
@@ -431,24 +410,14 @@ function parseAnnotationScreenshotCapture(
   input: unknown,
 ): AnnotationScreenshotCapture | null {
   if (!isRecord(input) || !hasExactKeys(input, SCREENSHOT_CAPTURE_KEYS)) return null;
-  if (!isNonEmptyString(input.id) || input.mimeType !== 'image/png') return null;
-  if (!isSafePositiveInteger(input.width) || !isSafePositiveInteger(input.height)) return null;
-  if (!isPngDataUrl(input.dataUrl)) return null;
-  return {
+  const screenshot = parseAnnotationScreenshot({
     id: input.id,
     mimeType: input.mimeType,
     width: input.width,
     height: input.height,
-    dataUrl: input.dataUrl,
-  };
-}
-
-function isLegacyPrivateScreenshot(input: unknown, annotationId: string): boolean {
-  if (!isRecord(input) || !hasExactKeys(input, LEGACY_SCREENSHOT_KEYS)) return false;
-  return input.id === annotationId
-    && input.mimeType === 'image/png'
-    && isSafePositiveInteger(input.width)
-    && isSafePositiveInteger(input.height);
+  });
+  if (screenshot === null || !isPngDataUrl(input.dataUrl)) return null;
+  return { ...screenshot, dataUrl: input.dataUrl };
 }
 
 function parseAnnotationAnchor(input: unknown): AnnotationAnchor | null {

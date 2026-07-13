@@ -6,7 +6,6 @@ import {
   parseCaptureVisibleTabRequest,
 } from '@/lib/element-capture';
 import {
-  broadcastLocalFolderState,
   browserLocalFolderRepository,
   createLocalFolderWorkspace,
   deleteLegacyScreenshotStorage,
@@ -17,7 +16,6 @@ export default defineBackground(() => {
   const localFolder = createLocalFolderWorkspace(
     browserLocalFolderRepository,
     isChromiumRuntime(),
-    broadcastLocalFolderState,
   );
   const annotationStorage = createAnnotationStorage(browser.storage.local, {
     now: () => Date.now(),

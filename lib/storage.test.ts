@@ -292,7 +292,6 @@ describe('annotation storage', () => {
       mimeType: 'image/png',
       width: 320,
       height: 180,
-      path: `screenshots/${payload.id}.png`,
     });
     expect(workspace.get(payload.id)).not.toBeNull();
 
@@ -488,10 +487,6 @@ class InMemoryWorkspace implements LocalFolderWorkspace {
     return { _tag: 'connected', name: 'test' };
   }
 
-  async disconnect(): Promise<LocalFolderState> {
-    return { _tag: 'disconnected' };
-  }
-
   get(id: string): Blob | null {
     return this.blobs.get(id) ?? null;
   }
@@ -512,10 +507,10 @@ class InMemoryWorkspace implements LocalFolderWorkspace {
     this.snapshots.push(structuredClone(annotations));
   }
 
-  async writeScreenshot(capture: AnnotationScreenshotCapture): Promise<string | null> {
-    if (!this.available) return null;
+  async writeScreenshot(capture: AnnotationScreenshotCapture): Promise<boolean> {
+    if (!this.available) return false;
     this.blobs.set(capture.id, new Blob([capture.dataUrl], { type: capture.mimeType }));
-    return `screenshots/${capture.id}.png`;
+    return true;
   }
 }
 

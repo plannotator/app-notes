@@ -15,7 +15,6 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
-  X,
 } from 'lucide-react';
 import {
   getAnnotationStoragePrefixForUrl,
@@ -33,12 +32,10 @@ import {
   updateAnnotation,
 } from '@/lib/storage';
 import {
-  broadcastLocalFolderState,
   browserLocalFolderRepository,
   canChooseLocalFolder,
   chooseLocalFolder,
   createLocalFolderWorkspace,
-  parseLocalFolderStateChangedMessage,
 } from '@/lib/local-folder';
 import type { Annotation } from '@/lib/types';
 import type { LocalFolderState } from '@/lib/local-folder';
@@ -86,15 +83,11 @@ export function SidePanelApp() {
   const [editText, setEditText] = useState('');
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState('');
-  const [folderSupported] = useState(canChooseLocalFolder);
   const [folderWorkspace] = useState(() => createLocalFolderWorkspace(
     browserLocalFolderRepository,
-    folderSupported,
-    broadcastLocalFolderState,
+    canChooseLocalFolder(),
   ));
-  const [folderState, setFolderState] = useState<LocalFolderState>(() => folderSupported
-    ? { _tag: 'disconnected' }
-    : { _tag: 'unsupported' });
+  const [folderState, setFolderState] = useState<LocalFolderState | null>(null);
   const [isConnectingFolder, setIsConnectingFolder] = useState(false);
   const siteRef = useRef<PanelSite | null>(null);
   const viewRef = useRef<PanelView>(launch.view);
@@ -280,16 +273,6 @@ export function SidePanelApp() {
     };
   }, [folderWorkspace]);
 
-  useEffect(() => {
-    const handleFolderStateChange = (message: unknown) => {
-      const parsed = parseLocalFolderStateChangedMessage(message);
-      if (parsed !== null) setFolderState(parsed.state);
-      return undefined;
-    };
-    browser.runtime.onMessage.addListener(handleFolderStateChange);
-    return () => browser.runtime.onMessage.removeListener(handleFolderStateChange);
-  }, []);
-
   useEffect(() => () => {
     if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
   }, []);
@@ -403,21 +386,6 @@ export function SidePanelApp() {
     }
   };
 
-  const handleDisconnectFolder = async () => {
-    if (isConnectingFolder) return;
-    setIsConnectingFolder(true);
-    setStatus('');
-    try {
-      const next = await folderWorkspace.disconnect();
-      setFolderState(next);
-      setStatus('Local folder disconnected. Existing files were left in place.');
-    } catch {
-      setStatus('Couldn’t disconnect the folder.');
-    } finally {
-      setIsConnectingFolder(false);
-    }
-  };
-
   const handleClearAll = async () => {
     const currentSite = siteRef.current;
     if (!currentSite || !confirm('Remove all notes from this site?')) return;
@@ -514,12 +482,11 @@ export function SidePanelApp() {
         </header>
       )}
 
-      {view === 'site' && folderState._tag !== 'unsupported' && (
+      {view === 'site' && folderState !== null && folderState._tag !== 'unsupported' && (
         <LocalFolderControl
           state={folderState}
           busy={isConnectingFolder}
           onConnect={handleConnectFolder}
-          onDisconnect={handleDisconnectFolder}
           onReconnect={handleReconnectFolder}
         />
       )}
@@ -624,7 +591,6 @@ export function SidePanelApp() {
 interface LocalFolderControlProps {
   readonly busy: boolean;
   readonly onConnect: () => void | Promise<void>;
-  readonly onDisconnect: () => void | Promise<void>;
   readonly onReconnect: () => void | Promise<void>;
   readonly state: Exclude<LocalFolderState, { readonly _tag: 'unsupported' }>;
 }
@@ -650,7 +616,6 @@ function getFolderActionStatus(
 function LocalFolderControl({
   busy,
   onConnect,
-  onDisconnect,
   onReconnect,
   state,
 }: LocalFolderControlProps) {
@@ -686,29 +651,17 @@ function LocalFolderControl({
                 : 'Optional · enables screenshots'}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-0.5">
+      {!connected && (
         <button
           type="button"
           disabled={busy}
-          onClick={connected ? onConnect : hasConnection ? onReconnect : onConnect}
+          onClick={hasConnection ? onReconnect : onConnect}
           className="app-notes-pressable app-notes-touch-target inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-accent transition-[background-color,transform] hover:bg-accent-soft disabled:cursor-not-allowed disabled:text-text-tertiary"
         >
-          {!connected && hasConnection && <RefreshCw aria-hidden="true" size={12} />}
-          <span>{busy ? 'Working…' : connected ? 'Change' : hasConnection ? 'Reconnect' : 'Connect'}</span>
+          {hasConnection && <RefreshCw aria-hidden="true" size={12} />}
+          <span>{busy ? 'Connecting…' : hasConnection ? 'Reconnect' : 'Connect'}</span>
         </button>
-        {hasConnection && (
-          <button
-            type="button"
-            aria-label="Disconnect local folder"
-            title="Disconnect local folder"
-            disabled={busy}
-            onClick={onDisconnect}
-            className="app-notes-pressable app-notes-touch-target grid h-8 w-8 place-items-center rounded-lg text-text-tertiary transition-[background-color,color,transform] hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:text-text-tertiary"
-          >
-            <X aria-hidden="true" size={13} />
-          </button>
-        )}
-      </div>
+      )}
     </section>
   );
 }

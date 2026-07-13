@@ -1,6 +1,5 @@
 import { parseSiteId } from './page';
 import { formatSiteAnnotationsMarkdown } from './storage';
-import { createAnnotationScreenshotPath } from './types';
 import type { Annotation, AnnotationScreenshotCapture } from './types';
 
 /** The user-visible state of the optional local-folder connection. */
@@ -15,7 +14,6 @@ export type LocalFolderState =
 export interface LocalFolderRepository {
   readonly load: () => Promise<LocalFolderConnection | null>;
   readonly save: (connection: LocalFolderConnection) => Promise<void>;
-  readonly clear: () => Promise<void>;
 }
 
 /** The persisted local-folder connection. */
@@ -24,24 +22,17 @@ export interface LocalFolderConnection {
   readonly syncError: string | null;
 }
 
-/** Runtime notification emitted after the connected-folder state changes. */
-export interface LocalFolderStateChangedMessage {
-  readonly type: 'app-notes:local-folder/state-changed';
-  readonly state: LocalFolderState;
-}
-
 /** Folder capability used by annotation persistence and extension UI. */
 export interface LocalFolderWorkspace {
   readonly connect: (
     handle: AppNotesFileSystemDirectoryHandle,
     annotations: ReadonlyArray<Annotation>,
   ) => Promise<LocalFolderState>;
-  readonly disconnect: () => Promise<LocalFolderState>;
   readonly reconnect: (annotations: ReadonlyArray<Annotation>) => Promise<LocalFolderState>;
   readonly getState: () => Promise<LocalFolderState>;
   readonly removeScreenshots: (ids: ReadonlyArray<string>) => Promise<void>;
   readonly sync: (annotations: ReadonlyArray<Annotation>) => Promise<void>;
-  readonly writeScreenshot: (capture: AnnotationScreenshotCapture) => Promise<string | null>;
+  readonly writeScreenshot: (capture: AnnotationScreenshotCapture) => Promise<boolean>;
 }
 
 const DATABASE_NAME = 'app-notes-local-folder';
@@ -57,25 +48,20 @@ const SYNC_ERROR_MESSAGE = 'Couldn’t sync notes to the connected folder.';
 export function createLocalFolderWorkspace(
   repository: LocalFolderRepository,
   supported: boolean,
-  onStateChanged: (state: LocalFolderState) => Promise<void> = async () => undefined,
 ): LocalFolderWorkspace {
   const getConnectionWithPermission = async (): Promise<LocalFolderConnection | null> => {
     if (!supported) return null;
     const connection = await repository.load();
     if (connection === null) return null;
     const permission = await queryWritePermission(connection.handle);
-    if (permission === 'granted') return connection;
-    await onStateChanged({ _tag: 'reconnect', name: connection.handle.name });
-    return null;
+    return permission === 'granted' ? connection : null;
   };
 
   const recordSyncError = async (
     connection: LocalFolderConnection,
     syncError: string | null,
   ): Promise<void> => {
-    const nextConnection = { handle: connection.handle, syncError };
-    await repository.save(nextConnection);
-    await onStateChanged(stateFromConnection(nextConnection, true));
+    await repository.save({ handle: connection.handle, syncError });
   };
 
   const sync = async (annotations: ReadonlyArray<Annotation>): Promise<void> => {
@@ -99,13 +85,6 @@ export function createLocalFolderWorkspace(
       if (permission !== 'granted') return { _tag: 'reconnect', name: handle.name };
       await sync(annotations);
       return stateFromConnection(await repository.load(), true);
-    },
-    disconnect: async () => {
-      if (!supported) return { _tag: 'unsupported' };
-      await repository.clear();
-      const state: LocalFolderState = { _tag: 'disconnected' };
-      await onStateChanged(state);
-      return state;
     },
     reconnect: async (annotations) => {
       if (!supported) return { _tag: 'unsupported' };
@@ -143,9 +122,8 @@ export function createLocalFolderWorkspace(
     sync,
     writeScreenshot: async (capture) => {
       const connection = await getConnectionWithPermission();
-      if (connection === null) return null;
+      if (connection === null) return false;
       try {
-        const path = createAnnotationScreenshotPath(capture.id);
         const directory = await connection.handle.getDirectoryHandle(
           SCREENSHOTS_DIRECTORY,
           { create: true },
@@ -155,10 +133,10 @@ export function createLocalFolderWorkspace(
           screenshotFilename(capture.id),
           pngDataUrlToBlob(capture.dataUrl),
         );
-        return path;
+        return true;
       } catch {
         await recordSyncError(connection, SYNC_ERROR_MESSAGE);
-        return null;
+        return false;
       }
     },
   };
@@ -182,10 +160,6 @@ export function createIndexedDbLocalFolderRepository(): LocalFolderRepository {
       const database = await getDatabase();
       const record: ConnectionRecord = { id: CONNECTION_ID, ...connection };
       await runTransaction(database, 'readwrite', (store) => store.put(record));
-    },
-    clear: async () => {
-      const database = await getDatabase();
-      await runTransaction(database, 'readwrite', (store) => store.delete(CONNECTION_ID));
     },
   };
 }
@@ -242,16 +216,6 @@ export function parseLocalFolderState(input: unknown): LocalFolderState | null {
   }
 }
 
-/** Parse a connected-folder state notification from another extension context. */
-export function parseLocalFolderStateChangedMessage(
-  input: unknown,
-): LocalFolderStateChangedMessage | null {
-  if (!isRecord(input) || !hasExactKeys(input, ['type', 'state'])) return null;
-  if (input.type !== 'app-notes:local-folder/state-changed') return null;
-  const state = parseLocalFolderState(input.state);
-  return state === null ? null : { type: input.type, state };
-}
-
 /** Request the authoritative local-folder state from the background capability owner. */
 export async function getBrowserLocalFolderState(): Promise<LocalFolderState> {
   try {
@@ -262,15 +226,6 @@ export async function getBrowserLocalFolderState(): Promise<LocalFolderState> {
   } catch {
     return { _tag: 'unsupported' };
   }
-}
-
-/** Notify open extension surfaces that folder permission or sync state changed. */
-export async function broadcastLocalFolderState(state: LocalFolderState): Promise<void> {
-  const message: LocalFolderStateChangedMessage = {
-    type: 'app-notes:local-folder/state-changed',
-    state,
-  };
-  await browser.runtime.sendMessage(message).catch(() => undefined);
 }
 
 interface ConnectionRecord extends LocalFolderConnection {
@@ -334,10 +289,9 @@ export function formatAllAnnotationsMarkdown(annotations: ReadonlyArray<Annotati
     const representative = group[0];
     if (representative === undefined) continue;
     sections.push(formatSiteAnnotationsMarkdown(representative.url, group, {
-      nested: true,
       screenshotPath: (annotation) => annotation.screenshot === undefined
         ? null
-        : annotation.screenshot.path,
+        : `${SCREENSHOTS_DIRECTORY}/${screenshotFilename(annotation.screenshot.id)}`,
     }));
   }
   return `# App Notes\n\n${sections.join('\n')}`;
@@ -364,7 +318,8 @@ async function writeFile(
 }
 
 function screenshotFilename(id: string): string {
-  return createAnnotationScreenshotPath(id).slice(`${SCREENSHOTS_DIRECTORY}/`.length);
+  const safeId = id.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 96);
+  return `${safeId || 'screenshot'}.png`;
 }
 
 function pngDataUrlToBlob(dataUrl: string): Blob {
@@ -431,11 +386,6 @@ function isDirectoryHandle(input: unknown): input is AppNotesFileSystemDirectory
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === 'object' && input !== null && !Array.isArray(input);
-}
-
-function hasExactKeys(input: Record<string, unknown>, expected: ReadonlyArray<string>): boolean {
-  const keys = Object.keys(input);
-  return keys.length === expected.length && expected.every((key) => Object.hasOwn(input, key));
 }
 
 function isAbortError(input: unknown): boolean {
