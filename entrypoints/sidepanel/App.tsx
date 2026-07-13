@@ -6,11 +6,14 @@ import {
   Copy,
   Download,
   Files,
+  Folder,
+  FolderCheck,
   ImageIcon,
   Library,
   MessageSquare,
   MousePointer2,
   Pencil,
+  RefreshCw,
   Trash2,
 } from 'lucide-react';
 import {
@@ -28,9 +31,14 @@ import {
   groupAnnotationsByPage,
   updateAnnotation,
 } from '@/lib/storage';
-import { browserScreenshotStore } from '@/lib/screenshot-store';
-import { createSiteExportArchive } from '@/lib/site-export';
+import {
+  browserLocalFolderRepository,
+  canChooseLocalFolder,
+  chooseLocalFolder,
+  createLocalFolderWorkspace,
+} from '@/lib/local-folder';
 import type { Annotation } from '@/lib/types';
+import type { LocalFolderState } from '@/lib/local-folder';
 import type { AnnotationStoragePrefix } from '@/lib/page';
 
 interface PanelSite {
@@ -75,6 +83,12 @@ export function SidePanelApp() {
   const [editText, setEditText] = useState('');
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState('');
+  const [folderWorkspace] = useState(() => createLocalFolderWorkspace(
+    browserLocalFolderRepository,
+    canChooseLocalFolder(),
+  ));
+  const [folderState, setFolderState] = useState<LocalFolderState | null>(null);
+  const [isConnectingFolder, setIsConnectingFolder] = useState(false);
   const siteRef = useRef<PanelSite | null>(null);
   const viewRef = useRef<PanelView>(launch.view);
   const loadGenerationRef = useRef(0);
@@ -240,6 +254,25 @@ export function SidePanelApp() {
     };
   }, [commitSite, launch.sourceTabId, loadActiveTab, loadSite, refreshAllAnnotations]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const refreshFolderState = () => {
+      folderWorkspace.getState()
+        .then((next) => {
+          if (!cancelled) setFolderState(next);
+        })
+        .catch(() => {
+          if (!cancelled) setFolderState({ _tag: 'disconnected' });
+        });
+    };
+    refreshFolderState();
+    window.addEventListener('focus', refreshFolderState);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', refreshFolderState);
+    };
+  }, [folderWorkspace]);
+
   useEffect(() => () => {
     if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
   }, []);
@@ -295,12 +328,7 @@ export function SidePanelApp() {
       const markdown = await exportSiteAnnotations(currentSite.href);
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
-      const screenshotCount = currentSite.annotations.filter(
-        (annotation) => annotation.screenshot !== undefined,
-      ).length;
-      setStatus(screenshotCount === 0
-        ? 'All site notes copied.'
-        : 'Text copied. Export includes screenshots.');
+      setStatus('All site notes copied.');
       if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
       copiedTimerRef.current = window.setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -313,30 +341,48 @@ export function SidePanelApp() {
     if (!currentSite) return;
 
     try {
-      const hasScreenshots = currentSite.annotations.some(
-        (annotation) => annotation.screenshot !== undefined,
-      );
-      if (hasScreenshots) {
-        const archive = await createSiteExportArchive(
-          currentSite.href,
-          currentSite.annotations,
-          browserScreenshotStore,
-        );
-        downloadBlob(archive.blob, getExportFilename(currentSite.href, 'zip'));
-        setStatus(archive.missingScreenshots === 0
-          ? `${archive.includedScreenshots} ${archive.includedScreenshots === 1 ? 'screenshot' : 'screenshots'} exported with notes.`
-          : 'Exported notes; one or more screenshots were unavailable.');
-        return;
-      }
-
       const markdown = await exportSiteAnnotations(currentSite.href);
       downloadBlob(
         new Blob([markdown], { type: 'text/markdown' }),
-        getExportFilename(currentSite.href, 'md'),
+        getExportFilename(currentSite.href),
       );
       setStatus('Markdown exported.');
     } catch {
       setStatus('Couldn’t export notes.');
+    }
+  };
+
+  const handleConnectFolder = async () => {
+    if (isConnectingFolder) return;
+    setIsConnectingFolder(true);
+    setStatus('');
+    try {
+      const handle = await chooseLocalFolder();
+      if (handle === null) return;
+      const annotations = await getAllAnnotations();
+      const next = await folderWorkspace.connect(handle, annotations);
+      setFolderState(next);
+      setStatus(getFolderActionStatus(next, 'connected'));
+    } catch {
+      setStatus('Couldn’t connect that folder.');
+    } finally {
+      setIsConnectingFolder(false);
+    }
+  };
+
+  const handleReconnectFolder = async () => {
+    if (isConnectingFolder) return;
+    setIsConnectingFolder(true);
+    setStatus('');
+    try {
+      const annotations = await getAllAnnotations();
+      const next = await folderWorkspace.reconnect(annotations);
+      setFolderState(next);
+      setStatus(getFolderActionStatus(next, 'reconnected'));
+    } catch {
+      setStatus('Couldn’t reconnect the folder.');
+    } finally {
+      setIsConnectingFolder(false);
     }
   };
 
@@ -436,6 +482,15 @@ export function SidePanelApp() {
         </header>
       )}
 
+      {view === 'site' && folderState !== null && folderState._tag !== 'unsupported' && (
+        <LocalFolderControl
+          state={folderState}
+          busy={isConnectingFolder}
+          onConnect={handleConnectFolder}
+          onReconnect={handleReconnectFolder}
+        />
+      )}
+
       {view === 'all' ? (
         <AllNotesPage
           annotations={allAnnotations}
@@ -530,6 +585,84 @@ export function SidePanelApp() {
         {status}
       </p>
     </main>
+  );
+}
+
+interface LocalFolderControlProps {
+  readonly busy: boolean;
+  readonly onConnect: () => void | Promise<void>;
+  readonly onReconnect: () => void | Promise<void>;
+  readonly state: Exclude<LocalFolderState, { readonly _tag: 'unsupported' }>;
+}
+
+function getFolderActionStatus(
+  state: LocalFolderState,
+  success: 'connected' | 'reconnected',
+): string {
+  switch (state._tag) {
+    case 'connected':
+      return `Local folder ${success} and synced.`;
+    case 'sync-error':
+      return state.message;
+    case 'reconnect':
+      return 'Folder permission is required.';
+    case 'disconnected':
+      return 'No local folder is connected.';
+    case 'unsupported':
+      return '';
+  }
+}
+
+function LocalFolderControl({
+  busy,
+  onConnect,
+  onReconnect,
+  state,
+}: LocalFolderControlProps) {
+  const connected = state._tag === 'connected';
+  const hasConnection = state._tag !== 'disconnected';
+  const hasError = state._tag === 'sync-error';
+  const folderName = hasConnection ? state.name : null;
+
+  return (
+    <section
+      className="flex items-center gap-2 border-b border-border-subtle bg-surface px-4 py-2.5"
+      aria-label="Local folder sync"
+    >
+      <span
+        aria-hidden="true"
+        className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
+          connected ? 'bg-accent-soft text-accent' : 'bg-surface-2 text-text-secondary'
+        }`}
+      >
+        {connected ? <FolderCheck size={14} /> : <Folder size={14} />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[11px] font-medium text-text-primary">
+          {connected ? `Connected · ${folderName}` : hasError ? 'Sync error' : hasConnection ? 'Reconnect folder' : 'Local folder'}
+        </p>
+        <p className="truncate text-[10px] leading-4 text-text-tertiary">
+          {hasError
+            ? state.message
+            : connected
+              ? 'Markdown and screenshots stay in sync'
+              : hasConnection
+                ? folderName
+                : 'Optional · enables screenshots'}
+        </p>
+      </div>
+      {!connected && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={hasConnection ? onReconnect : onConnect}
+          className="app-notes-pressable app-notes-touch-target inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold text-accent transition-[background-color,transform] hover:bg-accent-soft disabled:cursor-not-allowed disabled:text-text-tertiary"
+        >
+          {hasConnection && <RefreshCw aria-hidden="true" size={12} />}
+          <span>{busy ? 'Connecting…' : hasConnection ? 'Reconnect' : 'Connect'}</span>
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -684,10 +817,6 @@ function AnnotationCard({
         {annotation.anchor.selector}
       </p>
 
-      {annotation.screenshot !== undefined && (
-        <AnnotationScreenshotPreview annotation={annotation} />
-      )}
-
       {isEditing ? (
         <div className="mt-2.5">
           <label className="sr-only" htmlFor={`edit-note-${annotation.id}`}>Edit note</label>
@@ -733,65 +862,6 @@ function AnnotationCard({
 
       <p className="mt-2 text-[10px] leading-4 text-text-tertiary">{timeAgo}</p>
     </article>
-  );
-}
-
-function AnnotationScreenshotPreview({ annotation }: { readonly annotation: Annotation }) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [unavailable, setUnavailable] = useState(false);
-  const screenshot = annotation.screenshot;
-
-  useEffect(() => {
-    if (screenshot === undefined) return;
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    setImageUrl(null);
-    setUnavailable(false);
-
-    browserScreenshotStore.get(screenshot.id)
-      .then((blob) => {
-        if (cancelled) return;
-        if (blob === null) {
-          setUnavailable(true);
-          return;
-        }
-        objectUrl = URL.createObjectURL(blob);
-        setImageUrl(objectUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setUnavailable(true);
-      });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
-    };
-  }, [screenshot]);
-
-  if (screenshot === undefined) return null;
-  if (unavailable) {
-    return (
-      <p className="mt-2.5 rounded-lg bg-surface-2 px-3 py-2 text-[11px] text-text-tertiary">
-        Screenshot unavailable
-      </p>
-    );
-  }
-
-  return (
-    <div className="mt-2.5 overflow-hidden rounded-lg bg-surface-2 shadow-[inset_0_0_0_1px_var(--color-border-subtle)]">
-      {imageUrl === null ? (
-        <div className="h-36 animate-pulse" aria-label="Loading screenshot" />
-      ) : (
-        <img
-          src={imageUrl}
-          alt={`Screenshot of ${annotation.anchor.text ?? annotation.anchor.label}`}
-          width={screenshot.width}
-          height={screenshot.height}
-          loading="lazy"
-          className="block h-36 w-full object-contain"
-        />
-      )}
-    </div>
   );
 }
 
@@ -915,9 +985,9 @@ function getAnnotationSummary(annotation: Annotation): string {
   return `${selectedText} — ${annotation.note}`;
 }
 
-function getExportFilename(url: string, extension: 'md' | 'zip'): string {
+function getExportFilename(url: string): string {
   const site = (getSiteDisplayLabel(url) ?? 'site').replace(/[^a-z0-9.-]+/gi, '-');
-  return `app-notes-${site}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+  return `app-notes-${site}-${new Date().toISOString().slice(0, 10)}.md`;
 }
 
 function downloadBlob(blob: Blob, filename: string): void {

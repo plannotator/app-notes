@@ -44,8 +44,11 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] Enabling annotations from the popup and keyboard shortcut works.
 - [ ] Hovering shows the correct element outline and readable label.
 - [ ] Clicking opens the note composer in a sensible position.
+- [ ] On Chrome, Edge, and Arc, screenshot capture is hidden until a writable local folder is connected with the native directory picker.
 - [ ] Capturing an element hides every App Notes overlay, produces a clean PNG of the visible selection, and shows a preview before save.
-- [ ] Retaking and removing a draft screenshot work; saving and reloading preserve the attached screenshot.
+- [ ] Retaking and removing a draft screenshot work; saving writes the PNG and updated Markdown into the connected folder.
+- [ ] Revoking folder permission disables capture; Reconnect restores it only after write permission is granted.
+- [ ] Firefox does not show Connect folder or screenshot capture controls.
 - [ ] Saving by button and `Cmd/Ctrl+Enter` works; blank notes cannot be saved.
 - [ ] Clicking away once says the draft is safe in plain language; clicking again discards it.
 - [ ] `Esc` follows the same guarded-draft behavior.
@@ -71,8 +74,9 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] **All notes** remains progressively disclosed and shows notes across every site.
 - [ ] Opening a global note navigates to the correct page.
 - [ ] Copying all site notes produces readable Markdown with useful selected/nearby text, not only selectors.
-- [ ] Copying notes with screenshots clearly explains that images are included through Export.
-- [ ] Exporting text-only notes downloads Markdown; exporting screenshot notes downloads one ZIP containing `notes.md` and every referenced PNG.
+- [ ] Copying and exporting notes continues to produce ordinary site Markdown without a screenshot ZIP path.
+- [ ] A connected folder continuously contains `app-notes.md` and referenced PNG files under `screenshots/`.
+- [ ] Connected, Reconnect, and Sync error states are clear, compact, and keyboard accessible.
 - [ ] Hacker News smoke test: annotate two story titles and confirm their titles appear in the export.
 - [ ] Clearing site notes removes only that site's notes and requires confirmation.
 - [ ] The badge count reflects only the current page.
@@ -87,7 +91,7 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] Reduced-motion mode avoids unnecessary motion.
 - [ ] No extension errors appear during the tested flows.
 - [ ] The extension makes no unexpected network requests.
-- [ ] Clipboard and download actions happen only after an explicit user action.
+- [ ] Clipboard, download, and native directory-picker actions happen only after an explicit user action.
 
 ## 4. Go/no-go gate
 
@@ -138,7 +142,7 @@ Apple reference: [package a Safari web extension](https://developer.apple.com/do
 - [ ] Chrome small promo tile at 440×280.
 - [ ] Store icon at 128×128 with sufficient transparent padding.
 - [ ] Plain reviewer notes explain that all data is local, how to enable annotations, how to open notes, and how to test multi-page persistence.
-- [ ] Permission explanations cover `<all_urls>` for page annotation and visible-element capture, `storage`, `unlimitedStorage` for durable local screenshot blobs, `activeTab`, `tabs`, `webNavigation`, and Chrome's `sidePanel`.
+- [ ] Permission explanations cover `<all_urls>` for page annotation and visible-element capture, `storage`, `activeTab`, `tabs`, `webNavigation`, Chrome's `sidePanel`, and the optional user-granted local directory handle.
 
 Chrome asset reference: [supplying images](https://developer.chrome.com/docs/webstore/images). Edge listing reference: [extension listing](https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension).
 
