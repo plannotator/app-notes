@@ -75,28 +75,6 @@ describe('annotation boundary parsing', () => {
     ).toBeNull();
   });
 
-  test('parses screenshot metadata without accepting PNG bytes in persisted notes', () => {
-    const withScreenshot: Annotation = {
-      ...validAnnotation,
-      screenshot: {
-        id: validAnnotation.id,
-        mimeType: 'image/png',
-        width: 640,
-        height: 360,
-      },
-    };
-
-    expect(parseAnnotation(withScreenshot)).toEqual(withScreenshot);
-    expect(parseAnnotation({
-      ...withScreenshot,
-      screenshot: { ...withScreenshot.screenshot, id: 'another-annotation' },
-    })).toBeNull();
-    expect(parseAnnotation({
-      ...withScreenshot,
-      screenshot: { ...withScreenshot.screenshot, dataUrl: 'data:image/png;base64,AAAA' },
-    })).toBeNull();
-  });
-
   test('strictly parses mutation commands', () => {
     const command: AnnotationMutationCommand = {
       type: 'app-notes:annotation/create',
@@ -112,31 +90,6 @@ describe('annotation boundary parsing', () => {
     };
 
     expect(parseAnnotationMutationCommand(command)).toEqual(command);
-    expect(parseAnnotationMutationCommand({
-      ...command,
-      payload: {
-        ...command.payload,
-        screenshot: {
-          id: command.payload.id,
-          mimeType: 'image/png',
-          width: 320,
-          height: 180,
-          dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
-        },
-      },
-    })).toEqual({
-      ...command,
-      payload: {
-        ...command.payload,
-        screenshot: {
-          id: command.payload.id,
-          mimeType: 'image/png',
-          width: 320,
-          height: 180,
-          dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
-        },
-      },
-    });
     expect(parseAnnotationMutationCommand({ ...command, unexpected: true })).toBeNull();
     expect(
       parseAnnotationMutationCommand({

@@ -11,18 +11,17 @@ To restore and export annotations, App Notes stores the following in the browser
 - notes you write;
 - the page URL and title;
 - a selector and a small amount of nearby element text used to identify the annotated element;
-- optional PNG screenshots you explicitly capture for an annotation;
 - annotation creation and update times.
 
 This data stays on the device and browser profile where App Notes is installed. App Notes has no account system, advertising, analytics, or Plannotator-operated server.
 
 ## When data leaves the extension
 
-Data leaves App Notes only when you explicitly copy notes to the clipboard, export a Markdown file or screenshot ZIP, or share that output yourself. Websites you visit and their own browser behavior remain subject to their privacy policies.
+Data leaves App Notes only when you explicitly copy notes to the clipboard, export a Markdown file, or share that output yourself. Websites you visit and their own browser behavior remain subject to their privacy policies.
 
 ## Retention and deletion
 
-Notes and attached screenshots remain in the browser's local extension storage until you delete individual notes, clear a site's notes, clear browser extension data, or uninstall App Notes.
+Notes remain in the browser's local extension storage until you delete individual notes, clear a site's notes, clear browser extension data, or uninstall App Notes.
 
 ## Changes
 
