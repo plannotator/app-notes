@@ -1,12 +1,16 @@
 # App Notes
 
-The source code for App Notes, a local-first browser extension for attaching notes to elements on any website and exporting every note for a site at once.
+The source code for App Notes, a local-first browser extension for annotating notes any website element and exporting every note for a site at once.
+Similar to reactgrab/agentation.
 
 ## Install
 
 - [Chrome Web Store](https://chromewebstore.google.com/detail/app-notes/lkknpieefdjpoancolcioblkpgnhpffl) — Released! 🎉
-- [Firefox Add-ons](https://addons.mozilla.org/firefox/) — coming soon
-- [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/) — coming soon
+
+**Download the builds or source for other browsers**
+- Firefox Add-ons — coming soon
+- Microsoft Edge Add-ons — coming soon
+- Safari Add-ons — coming soon
 
 Arc can install the Chrome release. Safari is planned after compatibility QA and App Store packaging.
 
