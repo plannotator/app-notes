@@ -4,7 +4,7 @@ The source code for App Notes, a local-first browser extension for attaching not
 
 ## Install
 
-- [Chrome Web Store]([https://chromewebstore.google.com/](https://chromewebstore.google.com/detail/app-notes/lkknpieefdjpoancolcioblkpgnhpffl) — Released! 🎉
+- [Chrome Web Store](https://chromewebstore.google.com/detail/app-notes/lkknpieefdjpoancolcioblkpgnhpffl) — Released! 🎉
 - [Firefox Add-ons](https://addons.mozilla.org/firefox/) — coming soon
 - [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/) — coming soon
 
