@@ -5,6 +5,7 @@ import {
   parsePageId,
   parseSiteId,
 } from './page';
+import { resolveAnnotationScope } from './annotation-scope';
 import {
   parseAnnotationMutationResult,
   parseAnnotations,
@@ -22,6 +23,7 @@ import type {
   DeleteAnnotationResult,
   UpdateAnnotationNoteResult,
 } from './types';
+import type { AnnotationScope } from './annotation-scope';
 
 /** The subset of browser storage used by the annotation repository. */
 export interface AnnotationStorageArea {
@@ -192,6 +194,16 @@ export async function getAllAnnotations(): Promise<Annotation[]> {
   return readAllAnnotations(browser.storage.local);
 }
 
+/** Read the product-approved page or site collection for a URL. */
+export async function getAnnotationsForScope(
+  url: string,
+  requestedScope: AnnotationScope,
+): Promise<Annotation[]> {
+  return resolveAnnotationScope(url, requestedScope) === 'page'
+    ? getAnnotations(url)
+    : getSiteAnnotations(url);
+}
+
 /** Send a create command to the background annotation writer. */
 export async function saveAnnotation(
   payload: AnnotationCreatePayload,
@@ -226,6 +238,21 @@ export async function clearSiteAnnotations(url: string): Promise<ClearSiteAnnota
   return browserAnnotationClient.clearSite(url);
 }
 
+/** The possible mutation results when clearing a page or site collection. */
+export type ClearAnnotationsForScopeResult =
+  | ClearAnnotationsResult
+  | ClearSiteAnnotationsResult;
+
+/** Clear the product-approved page or site collection for a URL. */
+export async function clearAnnotationsForScope(
+  url: string,
+  requestedScope: AnnotationScope,
+): Promise<ClearAnnotationsForScopeResult> {
+  return resolveAnnotationScope(url, requestedScope) === 'page'
+    ? clearAnnotations(url)
+    : clearSiteAnnotations(url);
+}
+
 /** Render the current page's parsed annotations as Markdown. */
 export async function exportAnnotations(url: string): Promise<string> {
   const annotations = await getAnnotations(url);
@@ -243,6 +270,16 @@ export async function exportAnnotations(url: string): Promise<string> {
 export async function exportSiteAnnotations(url: string): Promise<string> {
   const annotations = await getSiteAnnotations(url);
   return formatSiteAnnotationsMarkdown(url, annotations);
+}
+
+/** Export the product-approved page or site collection for a URL as Markdown. */
+export async function exportAnnotationsForScope(
+  url: string,
+  requestedScope: AnnotationScope,
+): Promise<string> {
+  return resolveAnnotationScope(url, requestedScope) === 'page'
+    ? exportAnnotations(url)
+    : exportSiteAnnotations(url);
 }
 
 /** Format already-parsed website annotations as deterministic, page-grouped Markdown. */

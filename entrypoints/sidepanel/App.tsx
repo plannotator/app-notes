@@ -12,28 +12,39 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
+import { LocalFileScopeControl } from '@/components/LocalFileScopeControl';
 import {
-  getAnnotationStoragePrefixForUrl,
+  annotationCollectionsEqual,
+  collectionContainsStorageKey,
+  getAnnotationCollectionIdentity,
+  isLocalFileUrl,
+  resolveNavigatedAnnotationScope,
+} from '@/lib/annotation-scope';
+import {
   getPageDisplayLabel,
   getSiteDisplayLabel,
   parseSiteId,
 } from '@/lib/page';
 import {
-  clearSiteAnnotations,
+  clearAnnotationsForScope,
   deleteAnnotation,
-  exportSiteAnnotations,
+  exportAnnotationsForScope,
   getAllAnnotations,
-  getSiteAnnotations,
+  getAnnotationsForScope,
   groupAnnotationsByPage,
   updateAnnotation,
 } from '@/lib/storage';
 import type { Annotation } from '@/lib/types';
-import type { AnnotationStoragePrefix } from '@/lib/page';
+import type {
+  AnnotationCollectionIdentity,
+  AnnotationScope,
+} from '@/lib/annotation-scope';
 
 interface PanelSite {
   readonly annotations: ReadonlyArray<Annotation>;
   readonly href: string;
-  readonly storagePrefix: AnnotationStoragePrefix | null;
+  readonly identity: AnnotationCollectionIdentity | null;
+  readonly scope: AnnotationScope;
   readonly tabId: number;
 }
 
@@ -62,7 +73,7 @@ function sortNewestFirst(annotations: ReadonlyArray<Annotation>): ReadonlyArray<
   return [...annotations].sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
-/** The current-website management surface for every saved note across its pages. */
+/** Manages notes for the current website or selected local-file collection. */
 export function SidePanelApp() {
   const [launch] = useState(getWorkspaceLaunch);
   const [site, setSite] = useState<PanelSite | null>(null);
@@ -118,36 +129,49 @@ export function SidePanelApp() {
     refreshAllAnnotations().catch(() => undefined);
   }, [cancelEditing, refreshAllAnnotations]);
 
-  const loadSite = useCallback(async (tabId: number, href: string) => {
-    const storagePrefix = getAnnotationStoragePrefixForUrl(href);
+  const loadSite = useCallback(async (
+    tabId: number,
+    href: string,
+    requestedScope?: AnnotationScope,
+  ) => {
     const currentSite = siteRef.current;
-    if (currentSite?.storagePrefix === storagePrefix) {
-      if (currentSite.href !== href || currentSite.tabId !== tabId) {
-        commitSite({ ...currentSite, href, tabId });
+    const currentScope = currentSite === null
+      ? undefined
+      : { url: currentSite.href, scope: currentSite.scope };
+    const scope = resolveNavigatedAnnotationScope(href, currentScope, requestedScope);
+    const identity = getAnnotationCollectionIdentity(href, scope);
+    if (currentSite && annotationCollectionsEqual(currentSite.identity, identity)) {
+      if (
+        currentSite.href !== href
+        || currentSite.tabId !== tabId
+        || currentSite.scope !== scope
+      ) {
+        commitSite({ ...currentSite, href, identity, scope, tabId });
       }
       return;
     }
 
     const generation = ++loadGenerationRef.current;
-    const loadingSite: PanelSite = { tabId, href, storagePrefix, annotations: [] };
+    const loadingSite: PanelSite = { tabId, href, identity, scope, annotations: [] };
     commitSite(loadingSite);
     cancelEditing();
     setStatus('');
 
-    if (storagePrefix === null) return;
+    if (identity === null) return;
 
     try {
-      const annotations = await getSiteAnnotations(href);
+      const annotations = await getAnnotationsForScope(href, scope);
       const current = siteRef.current;
       if (
         generation !== loadGenerationRef.current
-        || current?.storagePrefix !== storagePrefix
+        || current === null
+        || !annotationCollectionsEqual(current?.identity ?? null, identity)
       ) return;
 
       commitSite({ ...current, annotations: sortNewestFirst(annotations) });
     } catch {
       if (generation === loadGenerationRef.current) {
-        setStatus('Couldn’t load notes for this site.');
+        setStatus('Couldn’t load notes.');
       }
     }
   }, [cancelEditing, commitSite]);
@@ -199,23 +223,24 @@ export function SidePanelApp() {
       }
 
       const current = siteRef.current;
-      const currentStoragePrefix = current?.storagePrefix;
-      if (!current || !currentStoragePrefix) return;
-      if (!annotationKeys.some((key) => key.startsWith(currentStoragePrefix))) return;
+      const currentIdentity = current?.identity;
+      if (!current || !currentIdentity) return;
+      if (!annotationKeys.some((key) => collectionContainsStorageKey(currentIdentity, key))) return;
 
       const generation = ++loadGenerationRef.current;
-      getSiteAnnotations(current.href)
+      getAnnotationsForScope(current.href, current.scope)
         .then((annotations) => {
           const latest = siteRef.current;
           if (
             generation !== loadGenerationRef.current
-            || latest?.storagePrefix !== current.storagePrefix
+            || latest === null
+            || !annotationCollectionsEqual(latest?.identity ?? null, current.identity)
           ) return;
           commitSite({ ...latest, annotations: sortNewestFirst(annotations) });
         })
         .catch(() => {
-          if (siteRef.current?.storagePrefix === current.storagePrefix) {
-            setStatus('Couldn’t refresh notes for this site.');
+          if (annotationCollectionsEqual(siteRef.current?.identity ?? null, current.identity)) {
+            setStatus('Couldn’t refresh notes.');
           }
         });
     };
@@ -240,6 +265,13 @@ export function SidePanelApp() {
   useEffect(() => () => {
     if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
   }, []);
+
+  const handleScopeChange = async (scope: AnnotationScope) => {
+    const currentSite = siteRef.current;
+    if (!currentSite || !isLocalFileUrl(currentSite.href) || currentSite.scope === scope) return;
+    setCopied(false);
+    await loadSite(currentSite.tabId, currentSite.href, scope);
+  };
 
   const handleDelete = async (annotation: Annotation) => {
     if (!siteRef.current) return;
@@ -289,10 +321,10 @@ export function SidePanelApp() {
     if (!currentSite) return;
 
     try {
-      const markdown = await exportSiteAnnotations(currentSite.href);
+      const markdown = await exportAnnotationsForScope(currentSite.href, currentSite.scope);
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
-      setStatus('All site notes copied.');
+      setStatus(getCollectionCopiedMessage(currentSite.href, currentSite.scope));
       if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
       copiedTimerRef.current = window.setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -305,11 +337,11 @@ export function SidePanelApp() {
     if (!currentSite) return;
 
     try {
-      const markdown = await exportSiteAnnotations(currentSite.href);
+      const markdown = await exportAnnotationsForScope(currentSite.href, currentSite.scope);
       const blobUrl = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown' }));
       const anchor = document.createElement('a');
       anchor.href = blobUrl;
-      anchor.download = getExportFilename(currentSite.href);
+      anchor.download = getExportFilename(currentSite.href, currentSite.scope);
       anchor.click();
       URL.revokeObjectURL(blobUrl);
       setStatus('Markdown exported.');
@@ -320,21 +352,27 @@ export function SidePanelApp() {
 
   const handleClearAll = async () => {
     const currentSite = siteRef.current;
-    if (!currentSite || !confirm('Remove all notes from this site?')) return;
+    if (!currentSite || !confirm(getCollectionClearPrompt(currentSite.href, currentSite.scope))) {
+      return;
+    }
 
-    const result = await clearSiteAnnotations(currentSite.href);
-    if (result._tag !== 'site-cleared') {
-      setStatus('Couldn’t clear site notes.');
+    const result = await clearAnnotationsForScope(currentSite.href, currentSite.scope);
+    const cleared = currentSite.scope === 'page'
+      ? result._tag === 'cleared'
+      : result._tag === 'site-cleared';
+    if (!cleared) {
+      setStatus('Couldn’t clear notes.');
       return;
     }
 
     const latestSite = siteRef.current;
     if (
-      latestSite?.storagePrefix === currentSite.storagePrefix
+      latestSite !== null
+      && annotationCollectionsEqual(latestSite.identity, currentSite.identity)
     ) {
       commitSite({ ...latestSite, annotations: [] });
       cancelEditing();
-      setStatus('Site notes cleared.');
+      setStatus(getCollectionClearedMessage(currentSite.href, currentSite.scope));
     }
   };
 
@@ -358,8 +396,26 @@ export function SidePanelApp() {
   const annotations = site?.annotations ?? [];
   const groups = buildPanelGroups(annotations);
   const globalAnnotations = allAnnotations ?? [];
-  const pageUnavailable = site !== null && site.storagePrefix === null;
+  const pageUnavailable = site !== null && site.identity === null;
+  const localFile = site !== null && isLocalFileUrl(site.href);
+  const scope = site?.scope ?? 'site';
   const domain = site ? getSiteDisplayLabel(site.href) ?? 'Current site' : 'Current site';
+  const pageLabel = site ? getPageDisplayLabel(site.href) ?? 'Local file' : 'Local file';
+  const collectionDescription = localFile
+    ? scope === 'page' ? pageLabel : `${domain} · all files`
+    : `${domain} · all pages`;
+  const emptyTitle = pageUnavailable
+    ? 'Page unavailable'
+    : localFile
+      ? scope === 'page' ? 'No notes in this file' : 'No notes in this folder'
+      : 'No notes on this site';
+  const emptyDescription = pageUnavailable
+    ? 'App Notes works on regular web pages and local HTML files.'
+    : localFile
+      ? scope === 'page'
+        ? 'Annotate this file and its notes will collect here.'
+        : 'Notes from HTML files in this folder will collect here.'
+      : 'Annotate any page on this site and every note will collect here.';
 
   return (
     <main className="flex h-screen flex-col bg-surface">
@@ -368,8 +424,8 @@ export function SidePanelApp() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              aria-label="Back to current site notes"
-              title="Back to current site"
+              aria-label="Back to current notes"
+              title="Back to current notes"
               onClick={showSiteView}
               className="app-notes-pressable app-notes-touch-target grid h-8 w-8 shrink-0 place-items-center rounded-lg text-text-secondary transition-[background-color,color,transform] hover:bg-surface-hover hover:text-text-primary"
             >
@@ -377,7 +433,7 @@ export function SidePanelApp() {
             </button>
             <div className="min-w-0 flex-1">
               <h1 className="text-sm font-semibold tracking-[-0.012em] text-text-primary">All notes</h1>
-              <p className="mt-0.5 truncate text-xs text-text-secondary">Across every site</p>
+              <p className="mt-0.5 truncate text-xs text-text-secondary">Across all saved pages</p>
             </div>
             {allAnnotations !== null && (
               <span
@@ -394,7 +450,7 @@ export function SidePanelApp() {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h1 className="text-sm font-semibold tracking-[-0.012em] text-text-primary">App Notes</h1>
-              <p className="mt-0.5 truncate text-xs text-text-secondary">{domain} · all pages</p>
+              <p className="mt-0.5 truncate text-xs text-text-secondary">{collectionDescription}</p>
             </div>
             <button
               type="button"
@@ -411,6 +467,11 @@ export function SidePanelApp() {
               {annotations.length}
             </span>
           </div>
+          {localFile && (
+            <div className="mt-3">
+              <LocalFileScopeControl scope={scope} onChange={handleScopeChange} />
+            </div>
+          )}
         </header>
       )}
 
@@ -420,19 +481,18 @@ export function SidePanelApp() {
           onOpenAnnotation={handleOpenAnnotation}
         />
       ) : (
-        <section className="min-h-0 flex-1 overflow-y-auto" aria-label="Site notes">
+        <section
+          className="min-h-0 flex-1 overflow-y-auto"
+          aria-label={localFile ? scope === 'page' ? 'File notes' : 'Folder notes' : 'Site notes'}
+        >
         {annotations.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-7 py-16 text-center">
             <span className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-accent-soft text-accent">
               <MousePointer2 aria-hidden="true" size={20} strokeWidth={2} />
             </span>
-            <h2 className="text-sm font-medium text-text-primary">
-              {pageUnavailable ? 'Page unavailable' : 'No notes on this site'}
-            </h2>
+            <h2 className="text-sm font-medium text-text-primary">{emptyTitle}</h2>
             <p className="mt-1 max-w-[240px] text-xs leading-5 text-text-secondary">
-              {pageUnavailable
-                ? 'App Notes works on regular web pages opened with http or https.'
-                : 'Annotate any page on this site and every note will collect here.'}
+              {emptyDescription}
             </p>
           </div>
         ) : (
@@ -481,7 +541,9 @@ export function SidePanelApp() {
         <footer className="border-t border-border-subtle bg-surface px-4 py-3">
           <div className="grid grid-cols-2 gap-2">
             <FooterButton onClick={handleCopyAll} icon={copied ? <Check size={14} /> : <Copy size={14} />}>
-              {copied ? 'Copied' : 'Copy all'}
+              {copied
+                ? 'Copied'
+                : localFile ? scope === 'page' ? 'Copy file' : 'Copy folder' : 'Copy all'}
             </FooterButton>
             <FooterButton onClick={handleExport} icon={<Download size={14} />}>
               Export
@@ -493,7 +555,11 @@ export function SidePanelApp() {
             className="app-notes-pressable app-notes-touch-target mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-danger transition-[background-color,transform] hover:bg-danger-soft"
           >
             <Trash2 aria-hidden="true" size={13} />
-            <span>Clear site notes</span>
+            <span>
+              {localFile
+                ? scope === 'page' ? 'Clear file notes' : 'Clear folder notes'
+                : 'Clear site notes'}
+            </span>
           </button>
         </footer>
       )}
@@ -823,7 +889,29 @@ function getAnnotationSummary(annotation: Annotation): string {
   return `${selectedText} — ${annotation.note}`;
 }
 
-function getExportFilename(url: string): string {
-  const site = (getSiteDisplayLabel(url) ?? 'site').replace(/[^a-z0-9.-]+/gi, '-');
-  return `app-notes-${site}-${new Date().toISOString().slice(0, 10)}.md`;
+function getCollectionNoun(url: string, scope: AnnotationScope): 'file' | 'folder' | 'site' {
+  if (!isLocalFileUrl(url)) return 'site';
+  return scope === 'page' ? 'file' : 'folder';
+}
+
+function getCollectionCopiedMessage(url: string, scope: AnnotationScope): string {
+  const noun = getCollectionNoun(url, scope);
+  return `${noun[0]?.toUpperCase() ?? ''}${noun.slice(1)} notes copied.`;
+}
+
+function getCollectionClearedMessage(url: string, scope: AnnotationScope): string {
+  const noun = getCollectionNoun(url, scope);
+  return `${noun[0]?.toUpperCase() ?? ''}${noun.slice(1)} notes cleared.`;
+}
+
+function getCollectionClearPrompt(url: string, scope: AnnotationScope): string {
+  return `Remove all notes from this ${getCollectionNoun(url, scope)}?`;
+}
+
+function getExportFilename(url: string, scope: AnnotationScope): string {
+  const label = isLocalFileUrl(url) && scope === 'page'
+    ? getPageDisplayLabel(url)
+    : getSiteDisplayLabel(url);
+  const safeLabel = (label ?? getCollectionNoun(url, scope)).replace(/[^a-z0-9.-]+/gi, '-');
+  return `app-notes-${safeLabel}-${new Date().toISOString().slice(0, 10)}.md`;
 }

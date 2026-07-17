@@ -25,7 +25,7 @@ bun run dev
 
 Run `bun test` and `bun run build` before submitting changes.
 
-For local `file://` pages, enable **Allow access to file URLs** in App Notes' Chrome extension settings, then reload the file.
+On a local `file://` page, choose **Allow local files** in App Notes and approve Chrome's file-access toggle.
 
 See the [release checklist](docs/RELEASE_CHECKLIST.md) and [privacy policy](PRIVACY.md).
 

@@ -2,12 +2,24 @@ import { createAnnotationStorage, getAnnotations } from '@/lib/storage';
 import { getAnnotationStorageKeyForUrl } from '@/lib/page';
 import { parseAnnotationMutationCommand } from '@/lib/types';
 import { openNotesWorkspace } from '@/lib/open-notes-workspace';
+import { isLocalFileUrl } from '@/lib/annotation-scope';
+import {
+  getLocalFileSettingsUrl,
+  parseOpenLocalFileSettingsCommand,
+  parsePendingLocalFileAccessTab,
+  PENDING_LOCAL_FILE_ACCESS_TAB_KEY,
+} from '@/lib/local-file-access';
+import type {
+  OpenLocalFileSettingsCommand,
+  OpenLocalFileSettingsResult,
+} from '@/lib/local-file-access';
 
 export default defineBackground(() => {
   const annotationStorage = createAnnotationStorage(browser.storage.local, {
     now: () => Date.now(),
   });
   const badgeGenerations = new Map<number, number>();
+  const pendingLocalFileResumes = new Set<number>();
 
   browser.action.setBadgeBackgroundColor({ color: '#2563eb' }).catch(() => undefined);
 
@@ -59,7 +71,74 @@ export default defineBackground(() => {
     }).catch(() => undefined);
   };
 
+  const openLocalFileSettings = async (
+    command: OpenLocalFileSettingsCommand,
+  ): Promise<OpenLocalFileSettingsResult> => {
+    if (!import.meta.env.CHROME) return { _tag: 'failed' };
+
+    try {
+      await browser.tabs.get(command.tabId);
+
+      await browser.storage.session.set({
+        [PENDING_LOCAL_FILE_ACCESS_TAB_KEY]: command.tabId,
+      });
+      try {
+        await browser.tabs.create({
+          active: true,
+          url: getLocalFileSettingsUrl(browser.runtime.id),
+        });
+      } catch {
+        await browser.storage.session.remove(PENDING_LOCAL_FILE_ACCESS_TAB_KEY);
+        return { _tag: 'failed' };
+      }
+      return { _tag: 'opened' };
+    } catch {
+      return { _tag: 'failed' };
+    }
+  };
+
+  const resumePendingLocalFileTab = async (tabId: number) => {
+    if (!import.meta.env.CHROME || pendingLocalFileResumes.has(tabId)) return;
+    pendingLocalFileResumes.add(tabId);
+
+    try {
+      const stored = await browser.storage.session.get(PENDING_LOCAL_FILE_ACCESS_TAB_KEY);
+      const pendingTabId = parsePendingLocalFileAccessTab(
+        stored[PENDING_LOCAL_FILE_ACCESS_TAB_KEY],
+      );
+      if (pendingTabId !== tabId) return;
+
+      const allowed = await browser.extension.isAllowedFileSchemeAccess();
+      if (!allowed) return;
+
+      const tab = await browser.tabs.get(tabId);
+      if (!tab.url || !isLocalFileUrl(tab.url)) {
+        await browser.storage.session.remove(PENDING_LOCAL_FILE_ACCESS_TAB_KEY);
+        return;
+      }
+
+      await browser.tabs.reload(tabId);
+      await browser.storage.session.remove(PENDING_LOCAL_FILE_ACCESS_TAB_KEY);
+    } finally {
+      pendingLocalFileResumes.delete(tabId);
+    }
+  };
+
+  const clearPendingLocalFileTab = async (tabId: number) => {
+    if (!import.meta.env.CHROME) return;
+    const stored = await browser.storage.session.get(PENDING_LOCAL_FILE_ACCESS_TAB_KEY);
+    const pendingTabId = parsePendingLocalFileAccessTab(
+      stored[PENDING_LOCAL_FILE_ACCESS_TAB_KEY],
+    );
+    if (pendingTabId === tabId) {
+      await browser.storage.session.remove(PENDING_LOCAL_FILE_ACCESS_TAB_KEY);
+    }
+  };
+
   browser.runtime.onMessage.addListener((message: unknown) => {
+    const fileSettingsCommand = parseOpenLocalFileSettingsCommand(message);
+    if (fileSettingsCommand !== null) return openLocalFileSettings(fileSettingsCommand);
+
     const command = parseAnnotationMutationCommand(message);
     return command === null ? undefined : annotationStorage.execute(command);
   });
@@ -92,6 +171,7 @@ export default defineBackground(() => {
     browser.tabs.get(tabId)
       .then((tab) => updateBadgeForTab(tabId, tab.url))
       .catch(() => undefined);
+    resumePendingLocalFileTab(tabId).catch(() => undefined);
   });
 
   browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -106,6 +186,7 @@ export default defineBackground(() => {
 
   browser.tabs.onRemoved.addListener((tabId) => {
     badgeGenerations.delete(tabId);
+    clearPendingLocalFileTab(tabId).catch(() => undefined);
   });
 
   browser.webNavigation.onHistoryStateUpdated.addListener((details) => {
