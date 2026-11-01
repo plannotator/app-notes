@@ -21,6 +21,10 @@ import {
 } from '@/lib/storage';
 import { openNotesWorkspace } from '@/lib/open-notes-workspace';
 import { parseOpenLocalFileSettingsResult } from '@/lib/local-file-access';
+import {
+  parsePageReloadAttempt,
+  resolveUnreachablePageAvailability,
+} from '@/lib/page-availability';
 import type { AnnotationCollectionIdentity } from '@/lib/annotation-scope';
 
 interface AnnotationModeResponse {
@@ -31,8 +35,19 @@ type PageAvailability =
   | 'checking'
   | 'file-access-blocked'
   | 'file-reload-required'
+  | 'page-reload-required'
   | 'ready'
   | 'unsupported';
+
+const PAGE_RELOAD_ATTEMPT_KEY = 'app-notes:page-reload-attempt';
+
+function getUnreachableAvailability(tabId: number, url: string): PageAvailability {
+  return resolveUnreachablePageAvailability(
+    tabId,
+    url,
+    parsePageReloadAttempt(localStorage.getItem(PAGE_RELOAD_ATTEMPT_KEY)),
+  );
+}
 
 function parseAnnotationModeResponse(value: unknown): AnnotationModeResponse | null {
   if (typeof value !== 'object' || value === null) return null;
@@ -96,15 +111,14 @@ function App() {
         const response = parseAnnotationModeResponse(rawResponse);
         if (cancelled) return;
         if (!response) {
-          setAvailability(isLocalFileUrl(tab.url) ? 'file-reload-required' : 'unsupported');
+          setAvailability(getUnreachableAvailability(tab.id, tab.url));
           return;
         }
+        localStorage.removeItem(PAGE_RELOAD_ATTEMPT_KEY);
         setActive(response.active);
         setAvailability('ready');
       } catch {
-        if (!cancelled) {
-          setAvailability(isLocalFileUrl(tab.url) ? 'file-reload-required' : 'unsupported');
-        }
+        if (!cancelled) setAvailability(getUnreachableAvailability(tab.id, tab.url));
       }
     };
 
@@ -154,7 +168,7 @@ function App() {
       }
       setActive(response.active);
     } catch {
-      setAvailability(isLocalFileUrl(currentUrl) ? 'file-reload-required' : 'unsupported');
+      setAvailability(getUnreachableAvailability(tabId, currentUrl));
     } finally {
       setIsToggling(false);
     }
@@ -181,14 +195,20 @@ function App() {
     }
   };
 
-  const handleReloadLocalFile = async () => {
+  const handleReloadTab = async () => {
     if (tabId === null || isToggling) return;
     setIsToggling(true);
     try {
       await browser.tabs.reload(tabId);
+      if (availability === 'page-reload-required') {
+        localStorage.setItem(
+          PAGE_RELOAD_ATTEMPT_KEY,
+          JSON.stringify({ tabId, url: currentUrl }),
+        );
+      }
       window.close();
     } catch {
-      setStatus('Reload this file, then open App Notes again.');
+      setStatus(`Reload this ${availability === 'file-reload-required' ? 'file' : 'page'}, then open App Notes again.`);
       setIsToggling(false);
     }
   };
@@ -246,6 +266,8 @@ function App() {
         return 'Chrome needs one approval to open local files.';
       case 'file-reload-required':
         return 'Reload this file to finish enabling App Notes.';
+      case 'page-reload-required':
+        return 'Reload this page to start using App Notes.';
       case 'unsupported':
         return 'App Notes isn’t available on this page.';
       case 'ready':
@@ -263,13 +285,19 @@ function App() {
       ? {
           icon: <RotateCw size={15} />,
           label: 'Reload local file',
-          onClick: handleReloadLocalFile,
+          onClick: handleReloadTab,
         }
-      : {
-          icon: active ? <Check size={15} /> : <Power size={15} />,
-          label: active ? 'Annotations enabled' : 'Enable annotations',
-          onClick: toggleMode,
-        };
+      : availability === 'page-reload-required'
+        ? {
+            icon: <RotateCw size={15} />,
+            label: 'Reload page',
+            onClick: handleReloadTab,
+          }
+        : {
+            icon: active ? <Check size={15} /> : <Power size={15} />,
+            label: active ? 'Annotations enabled' : 'Enable annotations',
+            onClick: toggleMode,
+          };
 
   return (
     <main className="p-2" aria-label="App Notes controls">

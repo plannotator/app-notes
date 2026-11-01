@@ -80,6 +80,7 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] On a blocked local HTML file in Chrome, choose **Allow local files**, approve Chrome's toggle, return to the file, and confirm App Notes reloads it automatically.
 - [ ] Confirm local notes default to **This file**; switch to **This folder** and verify sibling-file notes appear while a different folder remains isolated.
 - [ ] Restricted browser pages fail gracefully without broken controls.
+- [ ] On a tab opened before installing App Notes, the popup offers **Reload page**, and annotations work after it. Browser store pages say App Notes isn't available and offer no reload.
 - [ ] Switch the operating system/browser between light and dark appearance; popup, composer, toast, markers, and notes workspace update automatically and remain legible on both light and dark host pages.
 - [ ] Keyboard focus order, visible focus, screen-reader labels, and 200% zoom are usable.
 - [ ] Reduced-motion mode avoids unnecessary motion.
