@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Check,
@@ -683,6 +683,14 @@ function AnnotationCard({
   onSaveEdit,
 }: AnnotationCardProps) {
   const timeAgo = getRelativeTime(annotation.createdAt);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const textarea = editTextareaRef.current;
+    if (!isEditing || !textarea) return;
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  }, [isEditing]);
 
   return (
     <article className="group px-4 py-3.5 transition-colors hover:bg-surface-hover">
@@ -725,6 +733,7 @@ function AnnotationCard({
         <div className="mt-2.5">
           <label className="sr-only" htmlFor={`edit-note-${annotation.id}`}>Edit note</label>
           <textarea
+            ref={editTextareaRef}
             id={`edit-note-${annotation.id}`}
             aria-keyshortcuts="Meta+Enter Control+Enter Escape"
             value={editText}
