@@ -77,6 +77,7 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 ### Compatibility and quality
 
 - [ ] Test a conventional multi-page site, a React/Vue SPA, Yahoo, Hacker News, and a page with open Shadow DOM.
+- [ ] Serve the [dialog fixture](fixtures/dialog-annotations.html) over localhost. For each case, select the target, click and type in the note field, then save. In dialog cases, verify the page's dialog stays open.
 - [ ] On a blocked local HTML file in Chrome, choose **Allow local files**, approve Chrome's toggle, return to the file, and confirm App Notes reloads it automatically.
 - [ ] Confirm local notes default to **This file**; switch to **This folder** and verify sibling-file notes appear while a different folder remains isolated.
 - [ ] Restricted browser pages fail gracefully without broken controls.

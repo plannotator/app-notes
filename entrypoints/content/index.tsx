@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { ContentApp } from './App';
 import { createContentEventBridge } from './event-bridge';
+import { createOverlayHost } from './overlay-host';
 
 const FIREWALLED_EVENTS = [
   'click',
@@ -41,6 +42,10 @@ export default defineContentScript({
       inset: '0',
       width: '100vw',
       height: '100vh',
+      margin: '0',
+      padding: '0',
+      border: '0',
+      background: 'transparent',
       zIndex: '2147483640',
       pointerEvents: 'none',
       overflow: 'visible',
@@ -68,9 +73,10 @@ export default defineContentScript({
       host.addEventListener(eventName, stopPagePropagation);
     }
 
+    const overlay = createOverlayHost(host, documentElement);
     const root = createRoot(container);
     flushSync(() => {
-      root.render(<ContentApp eventBridge={eventBridge} getShadowHost={() => host} />);
+      root.render(<ContentApp eventBridge={eventBridge} overlay={overlay} />);
     });
 
     ctx.onInvalidated(() => {

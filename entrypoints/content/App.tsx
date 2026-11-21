@@ -6,6 +6,7 @@ import { ElementHighlight } from './components/ElementHighlight';
 import { ExitWarningToast } from './components/ExitWarningToast';
 import { OverlayStyles } from './components/OverlayStyles';
 import type { ContentEventBridge } from './event-bridge';
+import type { OverlayHost } from './overlay-host';
 import {
   createAnnotationAnchor,
   deepElementFromPoint,
@@ -56,7 +57,7 @@ interface ParkedDraft {
 
 interface ContentAppProps {
   readonly eventBridge: ContentEventBridge;
-  readonly getShadowHost: () => HTMLElement | null;
+  readonly overlay: OverlayHost;
 }
 
 function createPageContext(href: string): PageContext {
@@ -94,8 +95,14 @@ function rectChanged(previous: DOMRect, next: DOMRect): boolean {
     || previous.height !== next.height;
 }
 
+function getFocusedElement(): HTMLElement | null {
+  let element = document.activeElement;
+  while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
+  return element instanceof HTMLElement ? element : null;
+}
+
 /** Owns the page picker, draft lifecycle, and current-page annotation snapshot. */
-export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
+export function ContentApp({ eventBridge, overlay }: ContentAppProps) {
   const [active, setActive] = useState(false);
   const [hoveredRect, setHoveredRect] = useState<DOMRect | null>(null);
   const [hoveredLabel, setHoveredLabel] = useState('');
@@ -120,9 +127,10 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
 
   const clearHover = useCallback(() => {
     hoveredElementRef.current = null;
+    if (!selectedRef.current) overlay.setTarget(null);
     setHoveredRect(null);
     setHoveredLabel('');
-  }, []);
+  }, [overlay]);
 
   const clearExitWarning = useCallback(() => {
     exitArmedRef.current = false;
@@ -195,9 +203,8 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
   }, [requestExitDraft]);
 
   const isEventInsideOverlay = useCallback((event: Event): boolean => {
-    const host = getShadowHost();
-    return host !== null && event.composedPath().includes(host);
-  }, [getShadowHost]);
+    return event.composedPath().includes(overlay.host);
+  }, [overlay]);
 
   const loadAnnotationsForPage = useCallback(async (page: PageContext) => {
     const generation = ++loadGenerationRef.current;
@@ -259,16 +266,17 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
       pageUrl: pageRef.current.href,
       pageTitle: getCurrentPageTitle(pageRef.current.href),
       rect,
-      returnFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+      returnFocus: getFocusedElement(),
       storageKey: pageRef.current.storageKey,
     };
 
     selectedRef.current = nextSelection;
+    overlay.setTarget(element);
     setSelected(nextSelection);
     updateDraft('');
     clearExitWarning();
     clearHover();
-  }, [clearExitWarning, clearHover, updateDraft]);
+  }, [clearExitWarning, clearHover, overlay, updateDraft]);
 
   useEffect(() => {
     loadAnnotationsForPage(pageRef.current).catch(() => undefined);
@@ -315,6 +323,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
       }
 
       if (element !== hoveredElementRef.current) {
+        overlay.setTarget(element);
         hoveredElementRef.current = element;
         setHoveredRect(element.getBoundingClientRect());
         setHoveredLabel(identifyElement(element));
@@ -417,6 +426,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
     eventBridge,
     isEventInsideOverlay,
     openEditorForElement,
+    overlay,
     requestExitDraft,
     requestExitDraftNearSelection,
     setAnnotationMode,
@@ -436,8 +446,13 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
           element = resolveAnnotationAnchor(currentSelection.anchor) ?? element;
         }
 
-        if (element.isConnected) {
-          const nextRect = element.getBoundingClientRect();
+        const nextRect = element.getBoundingClientRect();
+        if (!element.isConnected || nextRect.width === 0 || nextRect.height === 0) {
+          // A page may dismiss its dialog while the user is writing. Keep the draft
+          // visible at its last position rather than trapped in the hidden dialog.
+          overlay.setTarget(null);
+        } else {
+          overlay.setTarget(element);
           if (rectChanged(currentSelection.rect, nextRect) || element !== currentSelection.element) {
             const nextSelection = { ...currentSelection, element, rect: nextRect };
             selectedRef.current = nextSelection;
@@ -463,6 +478,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
             rect: element.getBoundingClientRect(),
           };
           selectedRef.current = restoredSelection;
+          overlay.setTarget(element);
           setSelected(restoredSelection);
           updateDraft(parkedDraft.note);
           clearHover();
@@ -478,6 +494,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
         return;
       }
 
+      overlay.setTarget(element);
       const rect = element.getBoundingClientRect();
       if (element !== hoveredElementRef.current) {
         hoveredElementRef.current = element;
@@ -509,7 +526,7 @@ export function ContentApp({ eventBridge, getShadowHost }: ContentAppProps) {
         layoutFrameRef.current = null;
       }
     };
-  }, [active, clearHover, updateDraft]);
+  }, [active, clearHover, overlay, updateDraft]);
 
   useEffect(() => {
     const handleMessage = (message: unknown) => {

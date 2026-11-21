@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>App Notes dialog regression fixture</title>
+<style>
+  body { font: 16px system-ui, sans-serif; }
+  #layer { width: 310px; min-height: 210px; padding: 18px; border: 2px solid; }
+  #layer[data-case="custom"] {
+    position: fixed;
+    top: 25%;
+    left: 30%;
+    background: white;
+    z-index: 2147483647;
+  }
+</style>
+
+<h1>Dialog annotation test</h1>
+<p>Choose a case, enable annotation mode, then select the button and add a note.</p>
+<nav aria-label="Test cases">
+  <a href="?case=page">Regular page</a> ·
+  <a href="?case=modal">Native modal</a> ·
+  <a href="?case=shadow">Modal in Shadow DOM</a> ·
+  <a href="?case=popover">Native popover</a> ·
+  <a href="?case=custom">Custom dialog</a>
+</nav>
+<p><button id="outside">Regular page target</button></p>
+
+<script>
+  const scenario = new URLSearchParams(location.search).get('case');
+  if (['modal', 'shadow', 'popover', 'custom'].includes(scenario)) {
+    const wrapper = document.body.appendChild(document.createElement('div'));
+    const root = scenario === 'shadow' ? wrapper.attachShadow({ mode: 'open' }) : wrapper;
+    if (root !== wrapper) root.append(document.querySelector('style').cloneNode(true));
+
+    const nativeModal = scenario === 'modal' || scenario === 'shadow';
+    const layer = document.createElement(nativeModal ? 'dialog' : 'div');
+    layer.id = 'layer';
+    layer.dataset.case = scenario;
+    layer.innerHTML = '<button id="inside">Target in ' + scenario + '</button>';
+    root.append(layer);
+
+    if (nativeModal) layer.showModal();
+    if (scenario === 'popover') {
+      layer.popover = 'auto';
+      layer.showPopover();
+    }
+    if (scenario === 'custom') {
+      layer.setAttribute('role', 'dialog');
+      layer.setAttribute('aria-modal', 'true');
+      const target = layer.querySelector('button');
+      document.addEventListener('focusin', event => {
+        if (!layer.contains(event.target)) target.focus();
+      });
+      target.focus();
+    }
+  }
+</script>
+</html>
