@@ -15,6 +15,8 @@
   --color-text-tertiary: #64748b;
   --color-danger: #dc2626;
   --color-danger-soft: #fef2f2;
+  --color-danger-solid: #b91c1c;
+  --color-danger-solid-hover: #991b1b;
   --color-control-disabled: #94a3b8;
   --color-selection: #dbeafe;
   --color-focus-ring: rgba(15, 23, 42, 0.78);

@@ -71,7 +71,7 @@ Test on Chrome Stable, Firefox Stable, Edge Stable, and current Arc. Test Safari
 - [ ] Copying all site notes produces readable Markdown with useful selected/nearby text, not only selectors.
 - [ ] Exporting downloads the same complete site-wide Markdown.
 - [ ] Hacker News smoke test: annotate two story titles and confirm their titles appear in the export.
-- [ ] Clearing site notes removes only that site's notes and requires confirmation.
+- [ ] In the popup and notes workspace, the clear confirmation fits inside the extension, focuses **Cancel** first, and dismisses without deleting on Escape. **Delete notes** removes only the named site, file, or folder’s notes.
 - [ ] The badge count reflects only the current page.
 
 ### Compatibility and quality

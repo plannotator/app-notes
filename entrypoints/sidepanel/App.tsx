@@ -12,6 +12,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
+import { ClearNotesDialog } from '@/components/ClearNotesDialog';
 import { LocalFileScopeControl } from '@/components/LocalFileScopeControl';
 import {
   annotationCollectionsEqual,
@@ -82,7 +83,9 @@ export function SidePanelApp() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [clearTarget, setClearTarget] = useState<PanelSite | null>(null);
   const [status, setStatus] = useState('');
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const siteRef = useRef<PanelSite | null>(null);
   const viewRef = useRef<PanelView>(launch.view);
   const loadGenerationRef = useRef(0);
@@ -155,6 +158,7 @@ export function SidePanelApp() {
     const loadingSite: PanelSite = { tabId, href, identity, scope, annotations: [] };
     commitSite(loadingSite);
     cancelEditing();
+    setClearTarget(null);
     setStatus('');
 
     if (identity === null) return;
@@ -350,30 +354,28 @@ export function SidePanelApp() {
     }
   };
 
-  const handleClearAll = async () => {
-    const currentSite = siteRef.current;
-    if (!currentSite || !confirm(getCollectionClearPrompt(currentSite.href, currentSite.scope))) {
-      return;
-    }
+  const handleClearAll = async (): Promise<boolean> => {
+    if (
+      !clearTarget?.identity
+      || !annotationCollectionsEqual(siteRef.current?.identity ?? null, clearTarget.identity)
+    ) return false;
 
-    const result = await clearAnnotationsForScope(currentSite.href, currentSite.scope);
-    const cleared = currentSite.scope === 'page'
+    const result = await clearAnnotationsForScope(clearTarget.href, clearTarget.scope);
+    const cleared = clearTarget.scope === 'page'
       ? result._tag === 'cleared'
       : result._tag === 'site-cleared';
-    if (!cleared) {
-      setStatus('Couldn’t clear notes.');
-      return;
-    }
+    if (!cleared) return false;
 
     const latestSite = siteRef.current;
     if (
       latestSite !== null
-      && annotationCollectionsEqual(latestSite.identity, currentSite.identity)
+      && annotationCollectionsEqual(latestSite.identity, clearTarget.identity)
     ) {
       commitSite({ ...latestSite, annotations: [] });
       cancelEditing();
-      setStatus(getCollectionClearedMessage(currentSite.href, currentSite.scope));
+      setStatus(getCollectionClearedMessage(clearTarget.href, clearTarget.scope));
     }
+    return true;
   };
 
   const handleOpenAnnotation = async (annotation: Annotation) => {
@@ -449,7 +451,7 @@ export function SidePanelApp() {
         <header className="border-b border-border-subtle px-4 py-3.5">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h1 className="text-sm font-semibold tracking-[-0.012em] text-text-primary">App Notes</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="text-sm font-semibold tracking-[-0.012em] text-text-primary">App Notes</h1>
               <p className="mt-0.5 truncate text-xs text-text-secondary">{collectionDescription}</p>
             </div>
             <button
@@ -551,7 +553,7 @@ export function SidePanelApp() {
           </div>
           <button
             type="button"
-            onClick={handleClearAll}
+            onClick={() => setClearTarget(siteRef.current)}
             className="app-notes-pressable app-notes-touch-target mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-danger transition-[background-color,transform] hover:bg-danger-soft"
           >
             <Trash2 aria-hidden="true" size={13} />
@@ -573,6 +575,16 @@ export function SidePanelApp() {
       >
         {status}
       </p>
+
+      {clearTarget && (
+        <ClearNotesDialog
+          url={clearTarget.href}
+          scope={clearTarget.scope}
+          fallbackFocusRef={headingRef}
+          onConfirm={handleClearAll}
+          onDismiss={() => setClearTarget(null)}
+        />
+      )}
     </main>
   );
 }
@@ -911,10 +923,6 @@ function getCollectionCopiedMessage(url: string, scope: AnnotationScope): string
 function getCollectionClearedMessage(url: string, scope: AnnotationScope): string {
   const noun = getCollectionNoun(url, scope);
   return `${noun[0]?.toUpperCase() ?? ''}${noun.slice(1)} notes cleared.`;
-}
-
-function getCollectionClearPrompt(url: string, scope: AnnotationScope): string {
-  return `Remove all notes from this ${getCollectionNoun(url, scope)}?`;
 }
 
 function getExportFilename(url: string, scope: AnnotationScope): string {

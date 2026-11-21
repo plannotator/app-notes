@@ -8,6 +8,7 @@ import {
   RotateCw,
   Trash2,
 } from 'lucide-react';
+import { ClearNotesDialog } from '@/components/ClearNotesDialog';
 import {
   collectionContainsStorageKey,
   getAnnotationCollectionIdentity,
@@ -62,7 +63,9 @@ function App() {
   const [currentUrl, setCurrentUrl] = useState('');
   const [tabId, setTabId] = useState<number | null>(null);
   const [isToggling, setIsToggling] = useState(false);
+  const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const [status, setStatus] = useState('');
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const collectionIdentityRef = useRef<AnnotationCollectionIdentity | null>(null);
   const currentUrlRef = useRef('');
   const countGenerationRef = useRef(0);
@@ -235,28 +238,18 @@ function App() {
     }
   };
 
-  const handleClear = async () => {
-    const localFile = isLocalFileUrl(currentUrl);
-    if (!confirm(localFile ? 'Remove all notes from this file?' : 'Remove all notes from this site?')) {
-      return;
-    }
-
-    try {
-      const scope = resolveAnnotationScope(currentUrl);
-      const result = await clearAnnotationsForScope(currentUrl, scope);
-      const cleared = scope === 'page' ? result._tag === 'cleared' : result._tag === 'site-cleared';
-      if (!cleared) {
-        setStatus('Couldn’t clear notes.');
-        return;
-      }
-      setCount(0);
-      setStatus(localFile ? 'File notes cleared.' : 'Site notes cleared.');
-    } catch {
-      setStatus('Couldn’t clear notes.');
-    }
-  };
-
+  const scope = resolveAnnotationScope(currentUrl);
   const localFile = isLocalFileUrl(currentUrl);
+
+  const handleClear = async (): Promise<boolean> => {
+    const result = await clearAnnotationsForScope(currentUrl, scope);
+    const cleared = scope === 'page' ? result._tag === 'cleared' : result._tag === 'site-cleared';
+    if (!cleared) return false;
+
+    setCount(0);
+    setStatus(localFile ? 'File notes cleared.' : 'Site notes cleared.');
+    return true;
+  };
   const copySuccess = localFile ? 'File notes copied.' : 'All site notes copied.';
   const defaultFooter = (() => {
     switch (availability) {
@@ -303,7 +296,7 @@ function App() {
     <main className="p-2" aria-label="App Notes controls">
       <header className="mb-1 flex items-center justify-between px-2 py-1.5">
         <div>
-          <h1 className="text-[13px] font-semibold tracking-[-0.01em] text-text-primary">App Notes</h1>
+          <h1 ref={headingRef} tabIndex={-1} className="text-[13px] font-semibold tracking-[-0.01em] text-text-primary">App Notes</h1>
           <p className="mt-0.5 text-[10px] text-text-tertiary">
             {localFile ? 'Notes for this file' : 'Notes for this site'}
           </p>
@@ -351,7 +344,7 @@ function App() {
         <MenuItem
           icon={<Trash2 size={15} />}
           label={localFile ? 'Clear file notes' : 'Clear site notes'}
-          onClick={handleClear}
+          onClick={() => setIsConfirmingClear(true)}
           danger
           disabled={count === 0}
         />
@@ -362,6 +355,16 @@ function App() {
           {status || defaultFooter}
         </span>
       </footer>
+
+      {isConfirmingClear && (
+        <ClearNotesDialog
+          url={currentUrl}
+          scope={scope}
+          fallbackFocusRef={headingRef}
+          onConfirm={handleClear}
+          onDismiss={() => setIsConfirmingClear(false)}
+        />
+      )}
     </main>
   );
 }
